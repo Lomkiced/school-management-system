@@ -2,9 +2,10 @@ import prisma from '../utils/prisma';
 
 export const getDashboardStats = async () => {
   // 1. Basic Counts
+  // FIX: Removed { where: { user: { isActive: true } } } to ensure all records are counted
   const [totalStudents, totalTeachers, activeClasses] = await Promise.all([
-    prisma.student.count({ where: { user: { isActive: true } } }),
-    prisma.teacher.count({ where: { user: { isActive: true } } }),
+    prisma.student.count(),
+    prisma.teacher.count(),
     prisma.class.count(),
   ]);
 
@@ -14,11 +15,18 @@ export const getDashboardStats = async () => {
   });
   const totalRevenue = totalRevenueResult._sum.amount || 0;
 
-  const allFees = await prisma.studentFee.findMany({ include: { feeStructure: true } });
+  // Calculate pending fees
+  const allFees = await prisma.studentFee.findMany({ 
+    include: { feeStructure: true } 
+  });
+  
+  // totalExpected = sum of all assigned fees
   const totalExpected = allFees.reduce((acc, fee) => acc + fee.feeStructure.amount, 0);
   
-  // 3. Financial History (For the Line Chart)
-  // We fetch last 100 payments and group them by month in JS
+  // pending = expected - revenue (Ensure it doesn't go below zero due to partial payment logic)
+  const pendingAmount = Math.max(0, totalExpected - totalRevenue);
+
+  // 3. Financial History (Optimized for Charts)
   const payments = await prisma.payment.findMany({
     take: 100,
     orderBy: { paidAt: 'asc' },
@@ -27,6 +35,7 @@ export const getDashboardStats = async () => {
 
   const historyMap: Record<string, number> = {};
   payments.forEach(p => {
+    // Group by 'Jan', 'Feb', etc.
     const month = new Date(p.paidAt).toLocaleString('default', { month: 'short' });
     historyMap[month] = (historyMap[month] || 0) + p.amount;
   });
@@ -42,22 +51,29 @@ export const getDashboardStats = async () => {
     _count: { gender: true }
   });
 
+  // Transform to standardized { name, value } format for frontend charts
   const demographics = genderStats.map(g => ({
     name: g.gender,
     value: g._count.gender
   }));
 
-  // 5. Recent Activity (Fetching Audit Logs correctly)
+  // 5. Recent Activity
   const logs = await prisma.auditLog.findMany({
     take: 5,
     orderBy: { createdAt: 'desc' },
-    include: { user: { select: { email: true, role: true } } }
+    include: { 
+      user: { 
+        select: { email: true, role: true } 
+      } 
+    }
   });
 
   const activity = logs.map(log => ({
-    action: log.action.replace('_', ' '), // Clean string
+    id: log.id,
+    action: log.action.replace('_', ' '),
     user: log.user.email,
     role: log.user.role,
+    details: log.details,
     createdAt: log.createdAt
   }));
 
@@ -69,10 +85,10 @@ export const getDashboardStats = async () => {
     },
     financials: {
       revenue: totalRevenue,
-      pending: Math.max(0, totalExpected - totalRevenue),
-      history: history // <--- CRITICAL FIX: Sending graph data
+      pending: pendingAmount,
+      history: history 
     },
-    demographics, // <--- CRITICAL FIX: Sending gender data
-    activity // <--- CRITICAL FIX: Sending audit logs
+    demographics,
+    activity
   };
 };
