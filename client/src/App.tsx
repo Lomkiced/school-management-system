@@ -1,16 +1,13 @@
 import { useEffect } from 'react';
 import { Navigate, Route, BrowserRouter as Router, Routes } from 'react-router-dom';
+import { ErrorBoundary } from './components/ui/ErrorBoundary'; // Reuse the boundary
 import { useAuthStore } from './store/authStore';
 
-// === IMPORT THE ERROR BOUNDARY ===
-import { ErrorBoundary } from './components/ui/ErrorBoundary';
-
-// Layouts
+// Layouts & Components
+import { Toaster } from 'sonner';
 import { DashboardLayout } from './components/layout/DashboardLayout';
 import { StudentLayout } from './components/layout/StudentLayout';
 import { TeacherLayout } from './components/layout/TeacherLayout';
-
-// Auth
 import { LoginForm } from './features/auth/LoginForm';
 
 // Dashboard
@@ -37,18 +34,22 @@ import { FeeList } from './features/finance/FeeList';
 import { StudentLedger } from './features/finance/StudentLedger';
 
 // Settings
-import { Toaster } from 'sonner';
 import { Settings } from './features/settings/Settings';
 
 function App() {
   const initialize = useAuthStore((state) => state.initialize);
 
   useEffect(() => {
-    initialize();
+    // Wrap initialization in a safety try-catch
+    try {
+      initialize();
+    } catch (error) {
+      console.error("Failed to initialize auth:", error);
+      localStorage.clear(); // Auto-fix: Clear bad data
+    }
   }, [initialize]);
 
   return (
-    // === WRAP THE ENTIRE APP IN ERROR BOUNDARY ===
     <ErrorBoundary>
       <Router>
         <Toaster position="top-right" richColors closeButton />
@@ -59,32 +60,22 @@ function App() {
           {/* === ADMIN PORTAL === */}
           <Route element={<DashboardLayout />}>
             <Route path="/dashboard" element={<Dashboard />} />
-            
-            {/* Student Management */}
             <Route path="/students" element={<StudentList />} />
             <Route path="/students/new" element={<AddStudent />} />
             <Route path="/students/enroll" element={<EnrollStudent />} />
-            
-            {/* Teacher Management */}
             <Route path="/teachers" element={<TeacherList />} />
             <Route path="/teachers/new" element={<AddTeacher />} />
-            
-            {/* Class & Academic Management */}
             <Route path="/classes" element={<ClassList />} />
             <Route path="/classes/new" element={<AddClass />} />
             <Route path="/classes/:classId/grading" element={<Gradebook />} />
-
-            {/* Financial Management */}
             <Route path="/finance" element={<FeeList />} />
             <Route path="/students/:studentId/ledger" element={<StudentLedger />} />
-
-            {/* System Settings */}
             <Route path="/settings" element={<Settings />} />
           </Route>
 
           {/* === STUDENT PORTAL === */}
           <Route path="/student" element={<StudentLayout />}>
-            <Route path="dashboard" element={<div className="text-2xl font-bold">Welcome, Student!</div>} />
+            <Route path="dashboard" element={<div className="text-2xl font-bold p-8">Welcome, Student!</div>} />
             <Route path="grades" element={<StudentGrades />} />
           </Route>
 

@@ -43,7 +43,7 @@ enum FeeStatus {
 // ================= CORE IDENTITY =================
 
 model User {
-  id        String   @id @default(uuid()) // Unique ID (e.g., 'a1b2-c3d4...')
+  id        String   @id @default(uuid()) // Unique ID
   email     String   @unique
   password  String   // Hashed password
   role      UserRole @default(STUDENT)
@@ -54,7 +54,7 @@ model User {
   studentProfile Student?
   teacherProfile Teacher?
   adminProfile   Admin?
-  auditLogs AuditLog[] // Tracks what this user did
+  auditLogs      AuditLog[] // Tracks what this user did
 }
 
 model Admin {
@@ -81,27 +81,30 @@ model Teacher {
 }
 
 model Student {
-  id          String   @id @default(uuid())
-  firstName   String
-  lastName    String
-  dateOfBirth DateTime
-  gender      Gender
-  address     String?
-  guardianName String?
+  id            String   @id @default(uuid())
+  firstName     String
+  lastName      String
+  dateOfBirth   DateTime
+  gender        Gender
+  address       String?
+  guardianName  String?
   guardianPhone String?
 
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
   admissionDate DateTime @default(now())
   
-  userId      String   @unique
-  user        User     @relation(fields: [userId], references: [id])
+  userId        String   @unique
+  user          User     @relation(fields: [userId], references: [id])
 
   // Relationships
-  enrollments Enrollment[]
-  attendances Attendance[]
-  grades      Grade[]
-  studentFees StudentFee[]
+  enrollments   Enrollment[]
+  attendances   Attendance[]
+  grades        Grade[]
+  studentFees   StudentFee[]
+  
+  // === LMS UPDATE ===
+  submissions   Submission[]
 }
 
 // ================= ACADEMIC STRUCTURE =================
@@ -162,7 +165,6 @@ model Section {
 }
 
 // The "Class" is the intersection of a Subject, a Teacher, and a Section
-// e.g., "Mr. Smith teaching Math to Grade 10-Einstein"
 model Class {
   id        Int     @id @default(autoincrement())
   sectionId Int
@@ -174,6 +176,10 @@ model Class {
   
   grades      Grade[]
   attendances Attendance[]
+
+  // === LMS UPDATE ===
+  materials   SubjectMaterial[]
+  assignments Assignment[]
 }
 
 model Enrollment {
@@ -215,11 +221,12 @@ model Attendance {
   studentId String
   student   Student          @relation(fields: [studentId], references: [id])
 
-  classId   Int?             
-  class     Class?           @relation(fields: [classId], references: [id]) // <--- THIS WAS MISSING
+  classId   Int?            
+  class     Class?           @relation(fields: [classId], references: [id]) 
   
   createdAt DateTime @default(now())
 }
+
 // ================= FINANCE (LEDGER) =================
 
 model FeeStructure {
@@ -233,25 +240,25 @@ model FeeStructure {
 }
 
 model StudentFee {
-  id             Int       @id @default(autoincrement())
+  id             Int          @id @default(autoincrement())
   studentId      String
-  student        Student   @relation(fields: [studentId], references: [id])
+  student        Student      @relation(fields: [studentId], references: [id])
   feeStructureId Int
   feeStructure   FeeStructure @relation(fields: [feeStructureId], references: [id])
   
-  status         FeeStatus @default(PENDING)
+  status         FeeStatus    @default(PENDING)
   payments       Payment[]
 }
 
 model Payment {
-  id           Int        @id @default(autoincrement())
-  amount       Float
-  method       String     // Cash, Bank Transfer, Gcash
-  transactionId String?   // External Ref ID
-  paidAt       DateTime   @default(now())
+  id            Int        @id @default(autoincrement())
+  amount        Float
+  method        String     // Cash, Bank Transfer, Gcash
+  transactionId String?    // External Ref ID
+  paidAt        DateTime   @default(now())
   
-  studentFeeId Int
-  studentFee   StudentFee @relation(fields: [studentFeeId], references: [id])
+  studentFeeId  Int
+  studentFee    StudentFee @relation(fields: [studentFeeId], references: [id])
 }
 
 // ================= SECURITY =================
@@ -263,4 +270,53 @@ model AuditLog {
   userId    String
   user      User     @relation(fields: [userId], references: [id])
   createdAt DateTime @default(now())
+}
+
+// ================= LMS & CLASSROOM (NEW) =================
+
+model SubjectMaterial {
+  id          Int      @id @default(autoincrement())
+  title       String
+  description String?
+  fileUrl     String   // Path to stored file
+  fileType    String   // e.g., "application/pdf"
+  
+  classId     Int
+  class       Class    @relation(fields: [classId], references: [id])
+  
+  createdAt   DateTime @default(now())
+}
+
+model Assignment {
+  id          Int      @id @default(autoincrement())
+  title       String
+  description String?
+  dueDate     DateTime
+  maxScore    Float
+  
+  classId     Int
+  class       Class    @relation(fields: [classId], references: [id])
+  
+  submissions Submission[]
+  
+  createdAt   DateTime @default(now())
+}
+
+model Submission {
+  id           Int      @id @default(autoincrement())
+  fileUrl      String?  // If they upload a file
+  content      String?  // If they type the answer
+  
+  grade        Float?
+  feedback     String?
+  
+  submittedAt  DateTime @default(now())
+  
+  studentId    String
+  student      Student  @relation(fields: [studentId], references: [id])
+  
+  assignmentId Int
+  assignment   Assignment @relation(fields: [assignmentId], references: [id])
+  
+  @@unique([studentId, assignmentId]) // One submission per assignment
 }

@@ -11,11 +11,11 @@ import { DashboardCharts } from './DashboardCharts';
 
 // --- Safe StatCard Component ---
 const StatCard = ({ title, value, icon: Icon, trend, trendValue, color }: any) => (
-  <Card className="border-l-4" style={{ borderLeftColor: color }}>
+  <Card className="border-l-4 shadow-sm" style={{ borderLeftColor: color }}>
     <CardContent className="p-6">
       <div className="flex items-center justify-between space-y-0 pb-2">
         <p className="text-sm font-medium text-slate-500">{title}</p>
-        <div className={`p-2 rounded-full bg-slate-100`}>
+        <div className={`p-2 rounded-full bg-slate-50`}>
           <Icon className="h-4 w-4" style={{ color: color }} />
         </div>
       </div>
@@ -33,18 +33,31 @@ const StatCard = ({ title, value, icon: Icon, trend, trendValue, color }: any) =
 );
 
 export const Dashboard = () => {
-  // Initialize with null, but we handle it safely below
-  const [stats, setStats] = useState<any>(null);
+  // 1. Initialize with SAFE empty defaults to prevent "Undefined" errors
+  const [stats, setStats] = useState({
+    counts: { students: 0, teachers: 0, classes: 0 },
+    financials: { revenue: 0, pending: 0, history: [] },
+    activity: [],
+    demographics: []
+  });
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
 
   const fetchStats = async () => {
     try {
       const res = await api.get('/analytics');
-      setStats(res.data.data || res.data);
+      // 2. Double check if data actually exists before setting
+      if (res.data) {
+        setStats({
+            counts: res.data.counts || { students: 0, teachers: 0, classes: 0 },
+            financials: res.data.financials || { revenue: 0, pending: 0, history: [] },
+            activity: res.data.activity || [],
+            demographics: res.data.demographics || []
+        });
+      }
     } catch (error) {
-      console.error("Dashboard error:", error);
-      // Set empty stats on error to prevent white screen
-      setStats({}); 
+      console.error("Dashboard failed to load:", error);
+      setError(true);
     } finally {
       setLoading(false);
     }
@@ -66,12 +79,14 @@ export const Dashboard = () => {
     </div>
   );
 
-  // SAFE DEFAULTS (Prevent White Screen)
-  const safeStats = stats || {};
-  const counts = safeStats.counts || { students: 0, teachers: 0, classes: 0 };
-  const financials = safeStats.financials || { revenue: 0, pending: 0, history: [] };
-  const demographics = safeStats.demographics || [];
-  const activity = safeStats.activity || [];
+  // 3. Fallback UI if API fails completely
+  if (error) return (
+      <div className="p-8 text-center">
+          <h2 className="text-xl font-bold text-red-600">Failed to load Dashboard Data</h2>
+          <p className="text-slate-500">The server analytics endpoint is not responding.</p>
+          <Button onClick={fetchStats} className="mt-4">Retry Connection</Button>
+      </div>
+  );
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
@@ -90,7 +105,7 @@ export const Dashboard = () => {
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <StatCard 
           title="Total Students" 
-          value={counts.students} 
+          value={stats.counts.students} 
           icon={Users} 
           trend="up" 
           trendValue="Active"
@@ -98,7 +113,7 @@ export const Dashboard = () => {
         />
         <StatCard 
           title="Total Teachers" 
-          value={counts.teachers} 
+          value={stats.counts.teachers} 
           icon={UserCheck} 
           trend="up" 
           trendValue="Active"
@@ -106,7 +121,7 @@ export const Dashboard = () => {
         />
         <StatCard 
           title="Active Sections" 
-          value={counts.classes} 
+          value={stats.counts.classes} 
           icon={BookOpen} 
           trend="down" 
           trendValue="Current Term"
@@ -114,7 +129,7 @@ export const Dashboard = () => {
         />
         <StatCard 
           title="Total Revenue" 
-          value={formatMoney(financials.revenue)} 
+          value={formatMoney(stats.financials.revenue)} 
           icon={DollarSign} 
           trend="up" 
           trendValue="YTD"
@@ -124,10 +139,10 @@ export const Dashboard = () => {
 
       <div className="grid gap-6 md:grid-cols-7">
         <div className="md:col-span-4">
-           {/* CRITICAL FIX: Passing safe objects guaranteed not to be null */}
+           {/* 4. Pass safe data to charts */}
            <DashboardCharts 
-             financials={financials} 
-             demographics={demographics} 
+             financials={stats.financials} 
+             demographics={stats.demographics} 
            />
         </div>
         
@@ -139,13 +154,13 @@ export const Dashboard = () => {
             <CardDescription>Latest system events</CardDescription>
           </CardHeader>
           <CardContent>
-            {activity.length === 0 ? (
+            {stats.activity.length === 0 ? (
               <p className="text-center text-slate-400 py-8">No recent activity</p>
             ) : (
               <div className="space-y-6">
-                {activity.slice(0, 5).map((item: any, i: number) => (
+                {stats.activity.slice(0, 5).map((item: any, i: number) => (
                   <div key={i} className="flex gap-4 relative">
-                    {i !== activity.length - 1 && (
+                    {i !== stats.activity.length - 1 && (
                       <div className="absolute left-[11px] top-8 bottom-[-24px] w-0.5 bg-slate-200"></div>
                     )}
                     <div className="relative z-10 flex h-6 w-6 items-center justify-center rounded-full bg-blue-100 ring-4 ring-white">
@@ -153,7 +168,7 @@ export const Dashboard = () => {
                     </div>
                     <div>
                       <p className="text-sm font-medium text-slate-900">
-                        New Enrollment: <span className="text-indigo-600">{item.lastName || 'Student'}, {item.firstName || ''}</span>
+                        Activity: <span className="text-indigo-600">{item.action || 'Event'}</span>
                       </p>
                       <p className="text-xs text-slate-500">
                         {item.createdAt ? new Date(item.createdAt).toLocaleDateString() : 'Just now'}
