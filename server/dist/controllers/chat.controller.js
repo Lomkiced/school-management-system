@@ -33,37 +33,46 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getTeacherDashboard = exports.getAdminDashboard = void 0;
-const analyticsService = __importStar(require("../services/analytics.service"));
-// Admin Dashboard
-const getAdminDashboard = async (req, res) => {
+exports.getHistory = exports.sendMessage = exports.getClassChat = void 0;
+const chatService = __importStar(require("../services/chat.service"));
+const parseId = (id) => parseInt(id);
+const getClassChat = async (req, res) => {
     try {
-        const user = req.user;
-        // Strict Security Check
-        if (user.role !== 'ADMIN' && user.role !== 'SUPER_ADMIN') {
-            return res.status(403).json({ message: "Access Denied: Admins Only" });
-        }
-        const data = await analyticsService.getAdminDashboardStats();
-        res.json({ success: true, data });
-    }
-    catch (error) {
-        console.error("Dashboard Error:", error);
-        res.status(500).json({ success: false, message: error.message });
-    }
-};
-exports.getAdminDashboard = getAdminDashboard;
-// Teacher Dashboard
-const getTeacherDashboard = async (req, res) => {
-    try {
-        const user = req.user;
-        if (user.role !== 'TEACHER') {
-            return res.status(403).json({ message: "Access Denied: Teachers Only" });
-        }
-        const data = await analyticsService.getTeacherAnalytics(user.userId);
-        res.json({ success: true, data });
+        const classId = parseId(req.params.classId);
+        const userId = req.user.userId;
+        if (isNaN(classId))
+            return res.status(400).json({ message: "Invalid Class ID" });
+        const conversation = await chatService.getClassConversation(classId, userId);
+        res.json({ success: true, data: conversation });
     }
     catch (error) {
         res.status(500).json({ success: false, message: error.message });
     }
 };
-exports.getTeacherDashboard = getTeacherDashboard;
+exports.getClassChat = getClassChat;
+const sendMessage = async (req, res) => {
+    try {
+        const { conversationId, content } = req.body;
+        const senderId = req.user.userId;
+        if (!content || !conversationId) {
+            return res.status(400).json({ message: "Content and Conversation ID required" });
+        }
+        const message = await chatService.sendMessage(conversationId, senderId, content);
+        res.status(201).json({ success: true, data: message });
+    }
+    catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+exports.sendMessage = sendMessage;
+const getHistory = async (req, res) => {
+    try {
+        const { conversationId } = req.params;
+        const messages = await chatService.getMessages(conversationId);
+        res.json({ success: true, data: messages });
+    }
+    catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+exports.getHistory = getHistory;

@@ -1,3 +1,4 @@
+// FILE: client/src/App.tsx
 import { Suspense, lazy, useEffect } from 'react';
 import { Navigate, Route, BrowserRouter as Router, Routes } from 'react-router-dom';
 import { Toaster } from 'sonner';
@@ -5,7 +6,7 @@ import { ErrorBoundary } from './components/ui/ErrorBoundary';
 import { useAuthStore } from './store/authStore';
 
 // === 1. LAZY LOAD COMPONENTS ===
-// This isolates crashes. If Dashboard fails, the App stays alive.
+// This isolates crashes. If one module fails, the App stays alive.
 
 // Layouts
 const DashboardLayout = lazy(() => import('./components/layout/DashboardLayout').then(m => ({ default: m.DashboardLayout })));
@@ -41,6 +42,10 @@ const StudentLedger = lazy(() => import('./features/finance/StudentLedger').then
 // Settings
 const Settings = lazy(() => import('./features/settings/Settings').then(m => ({ default: m.Settings })));
 
+// LMS (Quiz)
+const QuizPlayer = lazy(() => import('./features/lms/QuizPlayer').then(m => ({ default: m.QuizPlayer })));
+
+
 // === 2. LOADING SPINNER ===
 const LoadingScreen = () => (
   <div className="h-screen w-full flex flex-col items-center justify-center bg-slate-50 gap-4">
@@ -53,12 +58,8 @@ function App() {
   const initialize = useAuthStore((state) => state.initialize);
 
   useEffect(() => {
-    // Attempt to restore session
-    try {
-      initialize();
-    } catch (error) {
-      console.error("Auth Init Error:", error);
-    }
+    // Attempt to restore session on load
+    initialize();
   }, [initialize]);
 
   return (
@@ -71,6 +72,10 @@ function App() {
           <Routes>
             {/* Public */}
             <Route path="/login" element={<LoginForm />} />
+
+            {/* === CRITICAL FIX: QUIZ MODE (STANDALONE) === */}
+            {/* This MUST be outside the StudentLayout to work correctly */}
+            <Route path="/quiz/:quizId" element={<QuizPlayer />} />
 
             {/* Admin / Staff Portal */}
             <Route element={<DashboardLayout />}>
@@ -92,6 +97,7 @@ function App() {
             <Route path="/student" element={<StudentLayout />}>
               <Route path="dashboard" element={<div className="p-8 text-2xl font-bold">Student Dashboard</div>} />
               <Route path="grades" element={<StudentGrades />} />
+              {/* Quiz Route removed from here to fix 404 error */}
             </Route>
 
             {/* Teacher Portal */}
@@ -100,7 +106,7 @@ function App() {
               <Route path="grading/:classId" element={<Gradebook />} />
             </Route>
 
-            {/* Default */}
+            {/* Default Fallback */}
             <Route path="/" element={<Navigate to="/login" replace />} />
           </Routes>
         </Suspense>

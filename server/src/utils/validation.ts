@@ -37,3 +37,25 @@ export const gradeSchema = z.object({
   grade: z.coerce.number().min(0, "Grade cannot be negative"),
   feedback: z.string().optional(),
 });
+
+// ================= MODULE: QUIZ VALIDATION =================
+
+const optionSchema = z.object({
+  text: z.string().min(1, "Option text is required"),
+  isCorrect: z.boolean(),
+});
+
+const questionSchema = z.object({
+  text: z.string().min(3, "Question text must be meaningful"),
+  points: z.number().min(1),
+  type: z.enum(["MULTIPLE_CHOICE", "TRUE_FALSE", "IDENTIFICATION"]),
+  options: z.array(optionSchema).min(2, "Must have at least 2 options for MC/TF"),
+});
+
+export const quizSchema = z.object({
+  title: z.string().min(3, "Quiz title is required"),
+  description: z.string().optional(),
+  duration: z.number().min(5, "Duration must be at least 5 minutes"),
+  passingScore: z.number().min(1).max(100),
+  questions: z.array(questionSchema).min(1, "A quiz must have at least one question"),
+});

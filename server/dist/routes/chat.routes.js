@@ -33,22 +33,17 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-// FILE: server/src/routes/lms.routes.ts
+// FILE: server/src/routes/chat.routes.ts
 const express_1 = require("express");
-const lmsController = __importStar(require("../controllers/lms.controller"));
-const upload_middleware_1 = require("../middlewares/upload.middleware");
+const chatController = __importStar(require("../controllers/chat.controller"));
+const auth_middleware_1 = require("../middlewares/auth.middleware");
 const router = (0, express_1.Router)();
-// === ASSIGNMENTS ===
-router.post('/class/:classId/assignments', upload_middleware_1.upload.single('file'), lmsController.createAssignment);
-router.get('/class/:classId/assignments', lmsController.getAssignments);
-// === SUBMISSIONS ===
-router.post('/assignments/submit', upload_middleware_1.upload.single('file'), lmsController.submitAssignment);
-router.post('/submissions/:submissionId/grade', lmsController.gradeSubmission);
-// === MATERIALS ===
-router.post('/class/:classId/materials', upload_middleware_1.upload.single('file'), lmsController.uploadMaterial);
-router.get('/class/:classId/materials', lmsController.getMaterials);
-// === QUIZZES (NEW) ===
-router.post('/class/:classId/quizzes', lmsController.createQuiz);
-router.get('/quizzes/:quizId', lmsController.getQuiz);
-router.post('/quizzes/:quizId/submit', lmsController.submitQuiz);
+// Protect all chat routes
+router.use(auth_middleware_1.authenticate);
+// Get the chat room for a specific class
+router.get('/class/:classId', chatController.getClassChat);
+// Get message history for a specific room
+router.get('/room/:conversationId/messages', chatController.getHistory);
+// Send a message
+router.post('/send', chatController.sendMessage);
 exports.default = router;

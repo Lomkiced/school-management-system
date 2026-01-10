@@ -1,13 +1,15 @@
+// FILE: server/src/server.ts
 import cors from 'cors';
 import dotenv from 'dotenv';
 import express from 'express';
 import http from 'http';
 import path from 'path';
-import { initSocket } from './lib/socket'; // Import the singleton initializer
+import { initSocket } from './lib/socket';
 
 // Import Routes
 import analyticsRoutes from './routes/analytics.routes';
 import authRoutes from './routes/auth.routes';
+import chatRoutes from './routes/chat.routes'; // <--- NEW IMPORT
 import classRoutes from './routes/class.routes';
 import enrollmentRoutes from './routes/enrollment.routes';
 import financeRoutes from './routes/finance.routes';
@@ -24,14 +26,11 @@ dotenv.config();
 const app = express();
 const httpServer = http.createServer(app);
 
-// CRITICAL FIX: We initialize the socket, but we DO NOT export it.
-// This prevents other files from creating a circular dependency loop.
+// Initialize Socket.io
 const io = initSocket(httpServer); 
 
 app.use(cors());
 app.use(express.json());
-
-// Serve uploaded files statically
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
 // Routes
@@ -47,14 +46,16 @@ app.use('/api/settings', settingsRoutes);
 app.use('/api/portal', portalRoutes);
 app.use('/api/teacher-portal', teacherPortalRoutes);
 app.use('/api/lms', lmsRoutes);
+app.use('/api/chat', chatRoutes); // <--- NEW ROUTE
 
 // Socket.io Global Events
 io.on('connection', (socket) => {
   console.log(`User Connected: ${socket.id}`);
   
+  // Advanced: Allow client to "Join" a specific conversation room
   socket.on('join_room', (room) => {
-    socket.join(room);
-    console.log(`User ${socket.id} joined room: ${room}`);
+    socket.join(`conversation_${room}`); // Prefix to avoid collisions
+    console.log(`User ${socket.id} joined chat: ${room}`);
   });
 
   socket.on('disconnect', () => {

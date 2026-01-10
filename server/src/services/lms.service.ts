@@ -1,13 +1,12 @@
 // FILE: server/src/services/lms.service.ts
-
+import { QuestionType } from '@prisma/client';
 import { getIO } from '../lib/socket';
 import prisma from '../utils/prisma';
 
-// === ASSIGNMENTS ===
+// ================= ASSIGNMENTS =================
 
 export const createAssignment = async (classId: number, data: any, file?: Express.Multer.File) => {
   return await prisma.$transaction(async (tx) => {
-    // 1. Create Assignment
     const assignment = await tx.assignment.create({
       data: {
         title: data.title,
@@ -15,55 +14,36 @@ export const createAssignment = async (classId: number, data: any, file?: Expres
         dueDate: new Date(data.dueDate),
         maxScore: parseFloat(data.maxScore),
         classId: classId,
-        fileUrl: file ? file.path : null, // Store path if file exists
+        fileUrl: file ? file.path : null,
         fileType: file ? file.mimetype : null
       }
     });
 
-    // 2. Notify Students (Safe Socket Call)
     try {
       getIO().to(`class_${classId}`).emit('new_assignment', {
         title: `New Assignment: ${data.title}`,
-        assignmentId: assignment.id,
-        dueDate: assignment.dueDate
+        assignmentId: assignment.id
       });
-    } catch (e) {
-      console.warn("Socket not ready, skipping notification");
-    }
+    } catch (e) { /* Ignore socket error */ }
 
     return assignment;
   });
 };
 
-// FIX: Added 'filter' argument to match the Controller call
-export const getClassAssignments = async (classId: number, filter: 'all' | 'active' | 'past' = 'all') => {
-  const where: any = { classId };
-
-  // Logic to filter by Date
-  if (filter === 'active') {
-    where.dueDate = { gte: new Date() }; // Due date is in the future
-  } else if (filter === 'past') {
-    where.dueDate = { lt: new Date() };  // Due date is in the past
-  }
-
+export const getClassAssignments = async (classId: number, filter: string) => {
+  // Simple filter logic
   return await prisma.assignment.findMany({
-    where,
+    where: { classId },
     include: { submissions: true },
     orderBy: { createdAt: 'desc' }
   });
 };
 
-// === SUBMISSIONS ===
+// ================= SUBMISSIONS =================
 
 export const submitAssignment = async (studentId: string, assignmentId: number, file: Express.Multer.File | undefined, content?: string) => {
-  // Logic: Use Upsert to allow re-submissions
-  const submission = await prisma.submission.upsert({
-    where: {
-      studentId_assignmentId: {
-        studentId,
-        assignmentId
-      }
-    },
+  return await prisma.submission.upsert({
+    where: { studentId_assignmentId: { studentId, assignmentId } },
     update: {
       fileUrl: file ? file.path : undefined,
       content: content || undefined,
@@ -76,8 +56,6 @@ export const submitAssignment = async (studentId: string, assignmentId: number, 
       content: content || null
     }
   });
-
-  return submission;
 };
 
 export const gradeSubmission = async (submissionId: number, grade: number, feedback: string) => {
@@ -86,21 +64,17 @@ export const gradeSubmission = async (submissionId: number, grade: number, feedb
     data: { grade, feedback }
   });
 
-  // Notify Student
   try {
     getIO().to(`student_${submission.studentId}`).emit('grade_posted', {
-      message: `New Grade: ${grade}`,
-      assignmentId: submission.assignmentId,
-      feedback
+      message: `Grade Posted: ${grade}`,
+      assignmentId: submission.assignmentId
     });
-  } catch (e) {
-    console.warn("Socket not ready");
-  }
+  } catch (e) { /* Ignore */ }
 
   return submission;
 };
 
-// === MATERIALS ===
+// ================= MATERIALS =================
 
 export const uploadMaterial = async (classId: number, title: string, file: Express.Multer.File) => {
   return await prisma.subjectMaterial.create({
@@ -117,5 +91,103 @@ export const getClassMaterials = async (classId: number) => {
   return await prisma.subjectMaterial.findMany({
     where: { classId },
     orderBy: { createdAt: 'desc' }
+  });
+};
+
+// ================= QUIZ ENGINE (NEW) =================
+
+export const createQuiz = async (classId: number, data: any) => {
+  // Complex Transaction: Create Quiz -> Create Questions -> Create Options
+  return await prisma.quiz.create({
+    data: {
+      classId,
+      title: data.title,
+      description: data.description,
+      duration: data.duration,
+      passingScore: data.passingScore,
+      questions: {
+        create: data.questions.map((q: any) => ({
+          text: q.text,
+          points: q.points,
+          type: q.type,
+          options: {
+            create: q.options.map((o: any) => ({
+              text: o.text,
+              isCorrect: o.isCorrect
+            }))
+          }
+        }))
+      }
+    }
+  });
+};
+
+export const getQuiz = async (quizId: string) => {
+  return await prisma.quiz.findUnique({
+    where: { id: quizId },
+    include: {
+      questions: {
+        include: { options: true } // We send options to frontend (frontend must hide isCorrect!)
+      }
+    }
+  });
+};
+
+// THE AUTO-GRADER
+export const submitQuiz = async (studentId: string, quizId: string, answers: any[]) => {
+  // 1. Fetch the Quiz AND the Correct Answers (Source of Truth)
+  const quiz = await prisma.quiz.findUnique({
+    where: { id: quizId },
+    include: { questions: { include: { options: true } } }
+  });
+
+  if (!quiz) throw new Error("Quiz not found");
+
+  let totalScore = 0;
+  
+  // 2. Loop through every question and grade it
+  const processedAnswers = answers.map(ans => {
+    const question = quiz.questions.find(q => q.id === ans.questionId);
+    if (!question) return null;
+
+    let isCorrect = false;
+
+    // Logic for Multiple Choice / True False
+    if (question.type === QuestionType.MULTIPLE_CHOICE || question.type === QuestionType.TRUE_FALSE) {
+      const correctOption = question.options.find(o => o.isCorrect);
+      if (correctOption && correctOption.id === ans.selectedOptionId) {
+        isCorrect = true;
+      }
+    } 
+    // Logic for Identification (Text Match - Case Insensitive)
+    else if (question.type === QuestionType.IDENTIFICATION) {
+      const correctOption = question.options.find(o => o.isCorrect);
+      if (correctOption && ans.textAnswer) {
+        if (ans.textAnswer.trim().toLowerCase() === correctOption.text.toLowerCase()) {
+          isCorrect = true;
+        }
+      }
+    }
+
+    if (isCorrect) totalScore += question.points;
+
+    return {
+      questionId: ans.questionId,
+      selectedOptionId: ans.selectedOptionId,
+      textAnswer: ans.textAnswer
+    };
+  }).filter(a => a !== null); // remove invalid answers
+
+  // 3. Save the Attempt and the Score
+  return await prisma.quizAttempt.create({
+    data: {
+      quizId,
+      studentId,
+      score: totalScore,
+      finishedAt: new Date(),
+      answers: {
+        create: processedAnswers as any 
+      }
+    }
   });
 };

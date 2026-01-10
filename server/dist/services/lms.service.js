@@ -1,16 +1,16 @@
 "use strict";
-// FILE: server/src/services/lms.service.ts
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getClassMaterials = exports.uploadMaterial = exports.gradeSubmission = exports.submitAssignment = exports.getClassAssignments = exports.createAssignment = void 0;
+exports.submitQuiz = exports.getQuiz = exports.createQuiz = exports.getClassMaterials = exports.uploadMaterial = exports.gradeSubmission = exports.submitAssignment = exports.getClassAssignments = exports.createAssignment = void 0;
+// FILE: server/src/services/lms.service.ts
+const client_1 = require("@prisma/client");
 const socket_1 = require("../lib/socket");
 const prisma_1 = __importDefault(require("../utils/prisma"));
-// === ASSIGNMENTS ===
+// ================= ASSIGNMENTS =================
 const createAssignment = async (classId, data, file) => {
     return await prisma_1.default.$transaction(async (tx) => {
-        // 1. Create Assignment
         const assignment = await tx.assignment.create({
             data: {
                 title: data.title,
@@ -18,52 +18,34 @@ const createAssignment = async (classId, data, file) => {
                 dueDate: new Date(data.dueDate),
                 maxScore: parseFloat(data.maxScore),
                 classId: classId,
-                fileUrl: file ? file.path : null, // Store path if file exists
+                fileUrl: file ? file.path : null,
                 fileType: file ? file.mimetype : null
             }
         });
-        // 2. Notify Students (Safe Socket Call)
         try {
             (0, socket_1.getIO)().to(`class_${classId}`).emit('new_assignment', {
                 title: `New Assignment: ${data.title}`,
-                assignmentId: assignment.id,
-                dueDate: assignment.dueDate
+                assignmentId: assignment.id
             });
         }
-        catch (e) {
-            console.warn("Socket not ready, skipping notification");
-        }
+        catch (e) { /* Ignore socket error */ }
         return assignment;
     });
 };
 exports.createAssignment = createAssignment;
-// FIX: Added 'filter' argument to match the Controller call
-const getClassAssignments = async (classId, filter = 'all') => {
-    const where = { classId };
-    // Logic to filter by Date
-    if (filter === 'active') {
-        where.dueDate = { gte: new Date() }; // Due date is in the future
-    }
-    else if (filter === 'past') {
-        where.dueDate = { lt: new Date() }; // Due date is in the past
-    }
+const getClassAssignments = async (classId, filter) => {
+    // Simple filter logic
     return await prisma_1.default.assignment.findMany({
-        where,
+        where: { classId },
         include: { submissions: true },
         orderBy: { createdAt: 'desc' }
     });
 };
 exports.getClassAssignments = getClassAssignments;
-// === SUBMISSIONS ===
+// ================= SUBMISSIONS =================
 const submitAssignment = async (studentId, assignmentId, file, content) => {
-    // Logic: Use Upsert to allow re-submissions
-    const submission = await prisma_1.default.submission.upsert({
-        where: {
-            studentId_assignmentId: {
-                studentId,
-                assignmentId
-            }
-        },
+    return await prisma_1.default.submission.upsert({
+        where: { studentId_assignmentId: { studentId, assignmentId } },
         update: {
             fileUrl: file ? file.path : undefined,
             content: content || undefined,
@@ -76,7 +58,6 @@ const submitAssignment = async (studentId, assignmentId, file, content) => {
             content: content || null
         }
     });
-    return submission;
 };
 exports.submitAssignment = submitAssignment;
 const gradeSubmission = async (submissionId, grade, feedback) => {
@@ -84,21 +65,17 @@ const gradeSubmission = async (submissionId, grade, feedback) => {
         where: { id: submissionId },
         data: { grade, feedback }
     });
-    // Notify Student
     try {
         (0, socket_1.getIO)().to(`student_${submission.studentId}`).emit('grade_posted', {
-            message: `New Grade: ${grade}`,
-            assignmentId: submission.assignmentId,
-            feedback
+            message: `Grade Posted: ${grade}`,
+            assignmentId: submission.assignmentId
         });
     }
-    catch (e) {
-        console.warn("Socket not ready");
-    }
+    catch (e) { /* Ignore */ }
     return submission;
 };
 exports.gradeSubmission = gradeSubmission;
-// === MATERIALS ===
+// ================= MATERIALS =================
 const uploadMaterial = async (classId, title, file) => {
     return await prisma_1.default.subjectMaterial.create({
         data: {
@@ -117,3 +94,95 @@ const getClassMaterials = async (classId) => {
     });
 };
 exports.getClassMaterials = getClassMaterials;
+// ================= QUIZ ENGINE (NEW) =================
+const createQuiz = async (classId, data) => {
+    // Complex Transaction: Create Quiz -> Create Questions -> Create Options
+    return await prisma_1.default.quiz.create({
+        data: {
+            classId,
+            title: data.title,
+            description: data.description,
+            duration: data.duration,
+            passingScore: data.passingScore,
+            questions: {
+                create: data.questions.map((q) => ({
+                    text: q.text,
+                    points: q.points,
+                    type: q.type,
+                    options: {
+                        create: q.options.map((o) => ({
+                            text: o.text,
+                            isCorrect: o.isCorrect
+                        }))
+                    }
+                }))
+            }
+        }
+    });
+};
+exports.createQuiz = createQuiz;
+const getQuiz = async (quizId) => {
+    return await prisma_1.default.quiz.findUnique({
+        where: { id: quizId },
+        include: {
+            questions: {
+                include: { options: true } // We send options to frontend (frontend must hide isCorrect!)
+            }
+        }
+    });
+};
+exports.getQuiz = getQuiz;
+// THE AUTO-GRADER
+const submitQuiz = async (studentId, quizId, answers) => {
+    // 1. Fetch the Quiz AND the Correct Answers (Source of Truth)
+    const quiz = await prisma_1.default.quiz.findUnique({
+        where: { id: quizId },
+        include: { questions: { include: { options: true } } }
+    });
+    if (!quiz)
+        throw new Error("Quiz not found");
+    let totalScore = 0;
+    // 2. Loop through every question and grade it
+    const processedAnswers = answers.map(ans => {
+        const question = quiz.questions.find(q => q.id === ans.questionId);
+        if (!question)
+            return null;
+        let isCorrect = false;
+        // Logic for Multiple Choice / True False
+        if (question.type === client_1.QuestionType.MULTIPLE_CHOICE || question.type === client_1.QuestionType.TRUE_FALSE) {
+            const correctOption = question.options.find(o => o.isCorrect);
+            if (correctOption && correctOption.id === ans.selectedOptionId) {
+                isCorrect = true;
+            }
+        }
+        // Logic for Identification (Text Match - Case Insensitive)
+        else if (question.type === client_1.QuestionType.IDENTIFICATION) {
+            const correctOption = question.options.find(o => o.isCorrect);
+            if (correctOption && ans.textAnswer) {
+                if (ans.textAnswer.trim().toLowerCase() === correctOption.text.toLowerCase()) {
+                    isCorrect = true;
+                }
+            }
+        }
+        if (isCorrect)
+            totalScore += question.points;
+        return {
+            questionId: ans.questionId,
+            selectedOptionId: ans.selectedOptionId,
+            textAnswer: ans.textAnswer
+        };
+    }).filter(a => a !== null); // remove invalid answers
+    // 3. Save the Attempt and the Score
+    return await prisma_1.default.quizAttempt.create({
+        data: {
+            quizId,
+            studentId,
+            score: totalScore,
+            finishedAt: new Date(),
+            answers: {
+                create: processedAnswers
+            }
+        }
+    });
+};
+exports.submitQuiz = submitQuiz;

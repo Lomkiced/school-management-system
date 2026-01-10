@@ -1,7 +1,7 @@
 "use strict";
 // FILE: server/src/utils/validation.ts
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.gradeSchema = exports.assignmentSchema = exports.loginSchema = exports.registerSchema = void 0;
+exports.quizSchema = exports.gradeSchema = exports.assignmentSchema = exports.loginSchema = exports.registerSchema = void 0;
 const zod_1 = require("zod");
 // ================= AUTHENTICATION =================
 // Schema for Registering a new User
@@ -32,4 +32,22 @@ exports.assignmentSchema = zod_1.z.object({
 exports.gradeSchema = zod_1.z.object({
     grade: zod_1.z.coerce.number().min(0, "Grade cannot be negative"),
     feedback: zod_1.z.string().optional(),
+});
+// ================= MODULE: QUIZ VALIDATION =================
+const optionSchema = zod_1.z.object({
+    text: zod_1.z.string().min(1, "Option text is required"),
+    isCorrect: zod_1.z.boolean(),
+});
+const questionSchema = zod_1.z.object({
+    text: zod_1.z.string().min(3, "Question text must be meaningful"),
+    points: zod_1.z.number().min(1),
+    type: zod_1.z.enum(["MULTIPLE_CHOICE", "TRUE_FALSE", "IDENTIFICATION"]),
+    options: zod_1.z.array(optionSchema).min(2, "Must have at least 2 options for MC/TF"),
+});
+exports.quizSchema = zod_1.z.object({
+    title: zod_1.z.string().min(3, "Quiz title is required"),
+    description: zod_1.z.string().optional(),
+    duration: zod_1.z.number().min(5, "Duration must be at least 5 minutes"),
+    passingScore: zod_1.z.number().min(1).max(100),
+    questions: zod_1.z.array(questionSchema).min(1, "A quiz must have at least one question"),
 });
