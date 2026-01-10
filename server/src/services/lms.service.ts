@@ -1,4 +1,6 @@
-import { getIO } from '../lib/socket'; // <--- Import from lib
+// FILE: server/src/services/lms.service.ts
+
+import { getIO } from '../lib/socket';
 import prisma from '../utils/prisma';
 
 // === ASSIGNMENTS ===
@@ -33,9 +35,19 @@ export const createAssignment = async (classId: number, data: any, file?: Expres
   });
 };
 
-export const getClassAssignments = async (classId: number) => {
+// FIX: Added 'filter' argument to match the Controller call
+export const getClassAssignments = async (classId: number, filter: 'all' | 'active' | 'past' = 'all') => {
+  const where: any = { classId };
+
+  // Logic to filter by Date
+  if (filter === 'active') {
+    where.dueDate = { gte: new Date() }; // Due date is in the future
+  } else if (filter === 'past') {
+    where.dueDate = { lt: new Date() };  // Due date is in the past
+  }
+
   return await prisma.assignment.findMany({
-    where: { classId },
+    where,
     include: { submissions: true },
     orderBy: { createdAt: 'desc' }
   });

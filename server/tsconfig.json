@@ -1,3 +1,4 @@
+// FILE: server/tsconfig.json
 {
   "compilerOptions": {
     /* Language and Environment */
@@ -5,18 +6,20 @@
     "lib": ["es2020"],
 
     /* Modules */
-    "module": "commonjs",                  
+    "module": "commonjs",
     "moduleResolution": "node",
-    "verbatimModuleSyntax": false,         // <--- This was causing your crash
-    "esModuleInterop": true,               // <--- Allows "import express from 'express'"
+    "verbatimModuleSyntax": false,
+    "esModuleInterop": true,
 
     /* Emit */
     "outDir": "./dist",
-    "rootDir": "./src",
+    "rootDir": "./src",             // <--- The rule you set
 
     /* Type Checking */
     "strict": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true
-  }
+  },
+  "include": ["src/**/*"],          // <--- FIX: Only compile files inside src
+  "exclude": ["node_modules", "prisma", "test-socket.ts"] // <--- FIX: Explicitly ignore these
 }
