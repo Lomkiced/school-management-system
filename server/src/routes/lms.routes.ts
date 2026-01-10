@@ -1,9 +1,14 @@
 // FILE: server/src/routes/lms.routes.ts
 import { Router } from 'express';
 import * as lmsController from '../controllers/lms.controller';
+import { authenticate } from '../middlewares/auth.middleware'; // <--- Added Auth
 import { upload } from '../middlewares/upload.middleware';
 
 const router = Router();
+
+// === PROTECT ALL ROUTES ===
+// This populates req.user, which we need for the fix
+router.use(authenticate);
 
 // === ASSIGNMENTS ===
 router.post('/class/:classId/assignments', upload.single('file'), lmsController.createAssignment);
@@ -17,7 +22,7 @@ router.post('/submissions/:submissionId/grade', lmsController.gradeSubmission);
 router.post('/class/:classId/materials', upload.single('file'), lmsController.uploadMaterial);
 router.get('/class/:classId/materials', lmsController.getMaterials);
 
-// === QUIZZES (NEW) ===
+// === QUIZZES ===
 router.post('/class/:classId/quizzes', lmsController.createQuiz);
 router.get('/quizzes/:quizId', lmsController.getQuiz);
 router.post('/quizzes/:quizId/submit', lmsController.submitQuiz);

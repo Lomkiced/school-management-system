@@ -36,8 +36,12 @@ Object.defineProperty(exports, "__esModule", { value: true });
 // FILE: server/src/routes/lms.routes.ts
 const express_1 = require("express");
 const lmsController = __importStar(require("../controllers/lms.controller"));
+const auth_middleware_1 = require("../middlewares/auth.middleware"); // <--- Added Auth
 const upload_middleware_1 = require("../middlewares/upload.middleware");
 const router = (0, express_1.Router)();
+// === PROTECT ALL ROUTES ===
+// This populates req.user, which we need for the fix
+router.use(auth_middleware_1.authenticate);
 // === ASSIGNMENTS ===
 router.post('/class/:classId/assignments', upload_middleware_1.upload.single('file'), lmsController.createAssignment);
 router.get('/class/:classId/assignments', lmsController.getAssignments);
@@ -47,7 +51,7 @@ router.post('/submissions/:submissionId/grade', lmsController.gradeSubmission);
 // === MATERIALS ===
 router.post('/class/:classId/materials', upload_middleware_1.upload.single('file'), lmsController.uploadMaterial);
 router.get('/class/:classId/materials', lmsController.getMaterials);
-// === QUIZZES (NEW) ===
+// === QUIZZES ===
 router.post('/class/:classId/quizzes', lmsController.createQuiz);
 router.get('/quizzes/:quizId', lmsController.getQuiz);
 router.post('/quizzes/:quizId/submit', lmsController.submitQuiz);

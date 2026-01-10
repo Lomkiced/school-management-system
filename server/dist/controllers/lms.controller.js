@@ -32,10 +32,14 @@ var __importStar = (this && this.__importStar) || (function () {
         return result;
     };
 })();
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.submitQuiz = exports.getQuiz = exports.createQuiz = exports.getMaterials = exports.uploadMaterial = exports.gradeSubmission = exports.submitAssignment = exports.getAssignments = exports.createAssignment = void 0;
 const zod_1 = require("zod");
 const lmsService = __importStar(require("../services/lms.service"));
+const prisma_1 = __importDefault(require("../utils/prisma")); // <--- Needed for Student Lookup
 const validation_1 = require("../utils/validation");
 const parseId = (id, name) => {
     const parsed = parseInt(id);
@@ -73,9 +77,16 @@ exports.getAssignments = getAssignments;
 const submitAssignment = async (req, res) => {
     try {
         const { studentId, assignmentId, content } = req.body;
-        if (!studentId || !assignmentId)
+        // Fallback: If studentId is missing, try to find it from the User Token
+        let finalStudentId = studentId;
+        if (!finalStudentId && req.user) {
+            const student = await prisma_1.default.student.findUnique({ where: { userId: req.user.userId } });
+            if (student)
+                finalStudentId = student.id;
+        }
+        if (!finalStudentId || !assignmentId)
             return res.status(400).json({ success: false, message: "Missing fields" });
-        const submission = await lmsService.submitAssignment(studentId, parseInt(assignmentId), req.file, content);
+        const submission = await lmsService.submitAssignment(finalStudentId, parseInt(assignmentId), req.file, content);
         res.status(201).json({ success: true, data: submission });
     }
     catch (error) {
@@ -120,11 +131,10 @@ const getMaterials = async (req, res) => {
     }
 };
 exports.getMaterials = getMaterials;
-// ================= QUIZZES (NEW) =================
+// ================= QUIZZES =================
 const createQuiz = async (req, res) => {
     try {
         const classId = parseId(req.params.classId, 'Class');
-        // Validate the massive JSON structure for quizzes
         const validatedData = validation_1.quizSchema.parse(req.body);
         const quiz = await lmsService.createQuiz(classId, validatedData);
         res.status(201).json({ success: true, data: quiz });
@@ -132,7 +142,6 @@ const createQuiz = async (req, res) => {
     catch (error) {
         if (error instanceof zod_1.ZodError)
             return res.status(400).json({ success: false, message: error.issues[0].message });
-        console.error(error);
         res.status(400).json({ success: false, message: 'Failed to create quiz' });
     }
 };
@@ -151,9 +160,18 @@ const getQuiz = async (req, res) => {
 exports.getQuiz = getQuiz;
 const submitQuiz = async (req, res) => {
     try {
-        const { studentId, answers } = req.body;
+        const { answers } = req.body;
         const quizId = req.params.quizId;
-        const attempt = await lmsService.submitQuiz(studentId, quizId, answers);
+        const userId = req.user?.userId; // Get ID from Token
+        // 1. Find the Student Profile associated with this User
+        const student = await prisma_1.default.student.findUnique({
+            where: { userId: userId }
+        });
+        if (!student) {
+            return res.status(400).json({ success: false, message: "Student profile not found. Are you logged in as a student?" });
+        }
+        // 2. Submit using the correct Student ID
+        const attempt = await lmsService.submitQuiz(student.id, quizId, answers);
         res.status(201).json({ success: true, data: attempt });
     }
     catch (error) {

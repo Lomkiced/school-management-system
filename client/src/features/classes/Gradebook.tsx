@@ -1,4 +1,5 @@
-import { ArrowLeft } from 'lucide-react';
+// FILE: client/src/features/classes/Gradebook.tsx
+import { ArrowLeft, Plus } from 'lucide-react'; // <--- Added 'Plus'
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'sonner';
@@ -8,6 +9,7 @@ import { Input } from '../../components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../../components/ui/table';
 import api from '../../lib/axios';
 import { useAuthStore } from '../../store/authStore';
+import { ChatRoom } from '../chat/ChatRoom';
 
 export const Gradebook = () => {
   const { classId } = useParams();
@@ -29,7 +31,7 @@ export const Gradebook = () => {
         setLoading(false);
       }
     };
-    fetchData();
+    if (classId) fetchData();
   }, [classId]);
 
   // Save Grade
@@ -37,21 +39,12 @@ export const Gradebook = () => {
     if (score) {
       try {
         await api.post('/grading', { studentId, classId, termId, score });
-        // SUCCESS TOAST
-        toast.success("Grade Saved", {
-            description: "The grade has been recorded successfully."
-        });
+        toast.success("Grade Saved");
       } catch (err) {
-        // ERROR TOAST
-        toast.error("Save Failed", {
-            description: "Could not save the grade. Check your connection."
-        });
-        return;
+        toast.error("Save Failed");
       }
     }
-
-    // 2. Update Local State (Instant Feedback)
-    // We clone the data to trigger a re-render with the new score
+    // Optimistic Update
     setData((prev: any) => {
       const newGrades = [...prev.grades];
       const existingIndex = newGrades.findIndex(g => g.studentId === studentId && g.termId === termId);
@@ -66,34 +59,18 @@ export const Gradebook = () => {
     });
   };
 
-  const handleBack = () => {
-    if (user?.role === 'TEACHER') {
-      navigate('/teacher/dashboard');
-    } else {
-      navigate('/classes');
-    }
-  };
-
-  // Helper: Find Score
-  const getScore = (studentId: string, termId: number) => {
-    const g = data?.grades.find((g: any) => g.studentId === studentId && g.termId === termId);
-    return g ? g.score : '';
-  };
-
-  // NEW: Helper: Calculate Average
   const calculateFinal = (studentId: string) => {
-    // Find all grades for this student in this class
     const studentGrades = data?.grades.filter((g: any) => g.studentId === studentId && g.score > 0);
     
     if (!studentGrades || studentGrades.length === 0) return '--';
 
     const total = studentGrades.reduce((sum: number, g: any) => sum + g.score, 0);
-    // Running Average: Sum / Count of entered grades
-    // Final Average: Sum / 4 (if you want strictly 4 quarters)
-    // Let's use Running Average for now so it shows something immediately
-    const average = total / studentGrades.length;
-    
-    return average.toFixed(0); // Round to whole number
+    return (total / studentGrades.length).toFixed(0);
+  };
+
+  const getScore = (studentId: string, termId: number) => {
+    const g = data?.grades.find((g: any) => g.studentId === studentId && g.termId === termId);
+    return g ? g.score : '';
   };
 
   if (loading) return <div className="p-8">Loading Gradebook...</div>;
@@ -102,55 +79,72 @@ export const Gradebook = () => {
   const { classInfo, students, terms } = data;
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div className="space-y-1">
-          <h2 className="text-2xl font-bold tracking-tight">Gradebook: {classInfo.subject.code}</h2>
-          <p className="text-slate-500">{classInfo.section.name} • {classInfo.subject.name}</p>
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-[calc(100vh-100px)]">
+      
+      {/* LEFT: GRADEBOOK TABLE (Takes up 2/3 space) */}
+      <div className="lg:col-span-2 space-y-6 overflow-y-auto">
+        <div className="flex items-center justify-between">
+          <div className="space-y-1">
+            <h2 className="text-2xl font-bold tracking-tight">Gradebook: {classInfo.subject.code}</h2>
+            <p className="text-slate-500">{classInfo.section.name} • {classInfo.subject.name}</p>
+          </div>
+          
+          <div className="flex gap-2">
+            {/* === NEW: CREATE QUIZ BUTTON (Only for Teachers) === */}
+            {user?.role === 'TEACHER' && (
+              <Button onClick={() => navigate(`/teacher/class/${classId}/quiz/new`)} className="bg-indigo-600 hover:bg-indigo-700">
+                <Plus className="mr-2 h-4 w-4" /> Create Quiz
+              </Button>
+            )}
+            
+            <Button variant="outline" onClick={() => navigate(user?.role === 'TEACHER' ? '/teacher/dashboard' : '/classes')}>
+              <ArrowLeft className="mr-2 h-4 w-4" /> Back
+            </Button>
+          </div>
         </div>
-        <Button variant="outline" onClick={handleBack}>
-          <ArrowLeft className="mr-2 h-4 w-4" /> Back
-        </Button>
+
+        <Card>
+          <CardContent className="p-0">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-[200px]">Student Name</TableHead>
+                  {terms.map((term: any) => (
+                    <TableHead key={term.id} className="text-center">{term.name}</TableHead>
+                  ))}
+                  <TableHead className="text-center font-bold text-blue-600">Final</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {students.map((student: any) => (
+                  <TableRow key={student.id}>
+                    <TableCell className="font-medium text-xs">{student.lastName}, {student.firstName}</TableCell>
+                    
+                    {terms.map((term: any) => (
+                      <TableCell key={term.id} className="p-1">
+                        <Input 
+                          className="w-14 mx-auto text-center h-8 text-xs" 
+                          defaultValue={getScore(student.id, term.id)}
+                          onBlur={(e) => handleGradeChange(student.id, term.id, e.target.value)}
+                        />
+                      </TableCell>
+                    ))}
+                    
+                    <TableCell className="text-center font-bold text-blue-600">
+                      {calculateFinal(student.id)}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
       </div>
 
-      <Card>
-        <CardContent className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-[300px]">Student Name</TableHead>
-                {terms.map((term: any) => (
-                  <TableHead key={term.id} className="text-center">{term.name}</TableHead>
-                ))}
-                <TableHead className="text-center font-bold text-blue-600">Final Grade</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {students.map((student: any) => (
-                <TableRow key={student.id}>
-                  <TableCell className="font-medium">{student.lastName}, {student.firstName}</TableCell>
-                  
-                  {terms.map((term: any) => (
-                    <TableCell key={term.id} className="p-2">
-                      <Input 
-                        className="w-20 mx-auto text-center h-8" 
-                        defaultValue={getScore(student.id, term.id)}
-                        onBlur={(e) => handleGradeChange(student.id, term.id, e.target.value)}
-                        placeholder="-"
-                      />
-                    </TableCell>
-                  ))}
-                  
-                  {/* The Calculated Final Grade */}
-                  <TableCell className="text-center font-bold text-blue-600 text-lg">
-                    {calculateFinal(student.id)}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+      {/* RIGHT: REAL-TIME CHAT (Takes up 1/3 space) */}
+      <div className="h-full">
+         <ChatRoom classId={parseInt(classId!)} />
+      </div>
     </div>
   );
 };

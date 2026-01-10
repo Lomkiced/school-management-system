@@ -6,9 +6,6 @@ import { ErrorBoundary } from './components/ui/ErrorBoundary';
 import { useAuthStore } from './store/authStore';
 
 // === 1. LAZY LOAD COMPONENTS ===
-// This isolates crashes. If one module fails, the App stays alive.
-
-// Layouts
 const DashboardLayout = lazy(() => import('./components/layout/DashboardLayout').then(m => ({ default: m.DashboardLayout })));
 const StudentLayout = lazy(() => import('./components/layout/StudentLayout').then(m => ({ default: m.StudentLayout })));
 const TeacherLayout = lazy(() => import('./components/layout/TeacherLayout').then(m => ({ default: m.TeacherLayout })));
@@ -44,7 +41,7 @@ const Settings = lazy(() => import('./features/settings/Settings').then(m => ({ 
 
 // LMS (Quiz)
 const QuizPlayer = lazy(() => import('./features/lms/QuizPlayer').then(m => ({ default: m.QuizPlayer })));
-
+const QuizBuilder = lazy(() => import('./features/lms/QuizBuilder').then(m => ({ default: m.QuizBuilder })));
 
 // === 2. LOADING SPINNER ===
 const LoadingScreen = () => (
@@ -58,7 +55,7 @@ function App() {
   const initialize = useAuthStore((state) => state.initialize);
 
   useEffect(() => {
-    // Attempt to restore session on load
+    // Attempt to restore session
     initialize();
   }, [initialize]);
 
@@ -67,14 +64,13 @@ function App() {
       <ErrorBoundary>
         <Toaster position="top-right" richColors closeButton />
         
-        {/* Suspense is REQUIRED for Lazy Loading */}
         <Suspense fallback={<LoadingScreen />}>
           <Routes>
             {/* Public */}
             <Route path="/login" element={<LoginForm />} />
 
-            {/* === CRITICAL FIX: QUIZ MODE (STANDALONE) === */}
-            {/* This MUST be outside the StudentLayout to work correctly */}
+            {/* === CRITICAL FIX: QUIZ MODE IS NOW STANDALONE === */}
+            {/* This ensures it works for both Students and Teachers without sidebar distractions */}
             <Route path="/quiz/:quizId" element={<QuizPlayer />} />
 
             {/* Admin / Staff Portal */}
@@ -97,16 +93,17 @@ function App() {
             <Route path="/student" element={<StudentLayout />}>
               <Route path="dashboard" element={<div className="p-8 text-2xl font-bold">Student Dashboard</div>} />
               <Route path="grades" element={<StudentGrades />} />
-              {/* Quiz Route removed from here to fix 404 error */}
+              {/* QUIZ ROUTE REMOVED FROM HERE */}
             </Route>
 
             {/* Teacher Portal */}
             <Route path="/teacher" element={<TeacherLayout />}>
               <Route path="dashboard" element={<TeacherDashboard />} />
               <Route path="grading/:classId" element={<Gradebook />} />
+              <Route path="class/:classId/quiz/new" element={<QuizBuilder />} />
             </Route>
 
-            {/* Default Fallback */}
+            {/* Default */}
             <Route path="/" element={<Navigate to="/login" replace />} />
           </Routes>
         </Suspense>
