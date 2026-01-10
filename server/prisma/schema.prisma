@@ -1,0 +1,266 @@
+// This is your Database Schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ================= ENUMS =================
+// Enums restrict data to specific allowed values (Type Safety)
+
+enum UserRole {
+  SUPER_ADMIN
+  ADMIN
+  TEACHER
+  STUDENT
+  PARENT
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+}
+
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  LATE
+  EXCUSED
+}
+
+enum FeeStatus {
+  PENDING
+  PARTIAL
+  PAID
+  OVERDUE
+}
+
+// ================= CORE IDENTITY =================
+
+model User {
+  id        String   @id @default(uuid()) // Unique ID (e.g., 'a1b2-c3d4...')
+  email     String   @unique
+  password  String   // Hashed password
+  role      UserRole @default(STUDENT)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  // Relationships
+  studentProfile Student?
+  teacherProfile Teacher?
+  adminProfile   Admin?
+  auditLogs AuditLog[] // Tracks what this user did
+}
+
+model Admin {
+  id        String @id @default(uuid())
+  firstName String
+  lastName  String
+  
+  userId    String @unique
+  user      User   @relation(fields: [userId], references: [id])
+}
+
+model Teacher {
+  id        String @id @default(uuid())
+  firstName String
+  lastName  String
+  phone     String?
+  address   String?
+  
+  userId    String @unique
+  user      User   @relation(fields: [userId], references: [id])
+  
+  // A teacher teaches many classes
+  classes   Class[]
+}
+
+model Student {
+  id          String   @id @default(uuid())
+  firstName   String
+  lastName    String
+  dateOfBirth DateTime
+  gender      Gender
+  address     String?
+  guardianName String?
+  guardianPhone String?
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  admissionDate DateTime @default(now())
+  
+  userId      String   @unique
+  user        User     @relation(fields: [userId], references: [id])
+
+  // Relationships
+  enrollments Enrollment[]
+  attendances Attendance[]
+  grades      Grade[]
+  studentFees StudentFee[]
+}
+
+// ================= ACADEMIC STRUCTURE =================
+
+model AcademicYear {
+  id        Int      @id @default(autoincrement())
+  name      String   // e.g., "2025-2026"
+  startDate DateTime
+  endDate   DateTime
+  isCurrent Boolean  @default(false)
+  
+  terms     Term[]
+  sections  Section[]
+}
+
+model Term {
+  id             Int          @id @default(autoincrement())
+  name           String       // e.g., "1st Quarter", "Semester 1"
+  startDate      DateTime
+  endDate        DateTime
+  academicYearId Int
+  academicYear   AcademicYear @relation(fields: [academicYearId], references: [id])
+  
+  grades         Grade[]
+}
+
+model GradeLevel {
+  id       Int       @id @default(autoincrement())
+  name     String    // e.g., "Grade 10", "Kindergarten"
+  level    Int       // Numerical value for sorting (e.g., 10)
+  
+  sections Section[]
+  subjects Subject[]
+}
+
+// ================= CLASS MANAGEMENT =================
+
+model Subject {
+  id           Int        @id @default(autoincrement())
+  name         String     // e.g., "Mathematics", "Science"
+  code         String     // e.g., "MATH101"
+  gradeLevelId Int
+  gradeLevel   GradeLevel @relation(fields: [gradeLevelId], references: [id])
+  
+  classes      Class[]
+}
+
+model Section {
+  id             Int          @id @default(autoincrement())
+  name           String       // e.g., "Einstein", "Section A"
+  gradeLevelId   Int
+  gradeLevel     GradeLevel   @relation(fields: [gradeLevelId], references: [id])
+  academicYearId Int
+  academicYear   AcademicYear @relation(fields: [academicYearId], references: [id])
+  
+  classes        Class[]      // Subjects taught to this section
+  enrollments    Enrollment[] // Students in this section
+}
+
+// The "Class" is the intersection of a Subject, a Teacher, and a Section
+// e.g., "Mr. Smith teaching Math to Grade 10-Einstein"
+model Class {
+  id        Int     @id @default(autoincrement())
+  sectionId Int
+  section   Section @relation(fields: [sectionId], references: [id])
+  subjectId Int
+  subject   Subject @relation(fields: [subjectId], references: [id])
+  teacherId String
+  teacher   Teacher @relation(fields: [teacherId], references: [id])
+  
+  grades      Grade[]
+  attendances Attendance[]
+}
+
+model Enrollment {
+  id        Int     @id @default(autoincrement())
+  studentId String
+  student   Student @relation(fields: [studentId], references: [id])
+  sectionId Int
+  section   Section @relation(fields: [sectionId], references: [id])
+  
+  joinedAt  DateTime @default(now())
+
+  @@unique([studentId, sectionId]) // A student cannot be in the same section twice
+}
+
+// ================= GRADING & ATTENDANCE =================
+
+model Grade {
+  id        Int     @id @default(autoincrement())
+  score     Float   // The actual grade value
+  remarks   String? // "Excellent", "Needs Improvement"
+  
+  studentId String
+  student   Student @relation(fields: [studentId], references: [id])
+  classId   Int
+  class     Class   @relation(fields: [classId], references: [id])
+  termId    Int
+  term      Term    @relation(fields: [termId], references: [id])
+
+  isLocked  Boolean @default(false) // If true, teacher cannot edit anymore
+
+  @@unique([studentId, classId, termId]) // One grade per student per class per term
+}
+
+model Attendance {
+  id        Int              @id @default(autoincrement())
+  date      DateTime
+  status    AttendanceStatus
+  
+  studentId String
+  student   Student          @relation(fields: [studentId], references: [id])
+
+  classId   Int?             
+  class     Class?           @relation(fields: [classId], references: [id]) // <--- THIS WAS MISSING
+  
+  createdAt DateTime @default(now())
+}
+// ================= FINANCE (LEDGER) =================
+
+model FeeStructure {
+  id          Int     @id @default(autoincrement())
+  name        String  // e.g., "Tuition Fee Grade 10"
+  amount      Float
+  description String?
+  dueDate     DateTime?
+  
+  studentFees StudentFee[]
+}
+
+model StudentFee {
+  id             Int       @id @default(autoincrement())
+  studentId      String
+  student        Student   @relation(fields: [studentId], references: [id])
+  feeStructureId Int
+  feeStructure   FeeStructure @relation(fields: [feeStructureId], references: [id])
+  
+  status         FeeStatus @default(PENDING)
+  payments       Payment[]
+}
+
+model Payment {
+  id           Int        @id @default(autoincrement())
+  amount       Float
+  method       String     // Cash, Bank Transfer, Gcash
+  transactionId String?   // External Ref ID
+  paidAt       DateTime   @default(now())
+  
+  studentFeeId Int
+  studentFee   StudentFee @relation(fields: [studentFeeId], references: [id])
+}
+
+// ================= SECURITY =================
+
+model AuditLog {
+  id        Int      @id @default(autoincrement())
+  action    String   // e.g. "GRADE_UPDATE", "PAYMENT_RECEIVED"
+  details   String   // e.g. "Changed Math grade for Juan from 80 to 95"
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  createdAt DateTime @default(now())
+}
