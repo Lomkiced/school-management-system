@@ -294,6 +294,10 @@ model Assignment {
   dueDate     DateTime
   maxScore    Float
   
+  // NEW FIELD: Allow teachers to attach a file (e.g., instructions PDF)
+  fileUrl     String?  
+  fileType    String?
+
   classId     Int
   class       Class    @relation(fields: [classId], references: [id])
   

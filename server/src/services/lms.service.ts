@@ -1,7 +1,5 @@
-import { io } from '../server'; // Import Socket.io instance
+import { getIO } from '../lib/socket';
 import prisma from '../utils/prisma';
-
-// === ASSIGNMENTS ===
 
 export const createAssignment = async (classId: number, data: any) => {
   const assignment = await prisma.assignment.create({
@@ -14,8 +12,8 @@ export const createAssignment = async (classId: number, data: any) => {
     }
   });
 
-  // REAL-TIME NOTIFICATION: Notify all students in this class
-  io.to(`class_${classId}`).emit('new_assignment', {
+  // FIX: Use getIO() instead of direct export
+  getIO().to(`class_${classId}`).emit('new_assignment', {
     message: `New Assignment: ${data.title}`,
     assignmentId: assignment.id
   });
@@ -23,11 +21,24 @@ export const createAssignment = async (classId: number, data: any) => {
   return assignment;
 };
 
-export const getClassAssignments = async (classId: number) => {
+/**
+ * Fetch assignments with advanced filtering (Active vs Past).
+ */
+export const getClassAssignments = async (classId: number, filter: 'all' | 'active' | 'past' = 'all') => {
+  const now = new Date();
+  
+  const whereClause: any = { classId };
+  if (filter === 'active') whereClause.dueDate = { gte: now };
+  if (filter === 'past') whereClause.dueDate = { lt: now };
+
   return await prisma.assignment.findMany({
-    where: { classId },
-    include: { submissions: true },
-    orderBy: { createdAt: 'desc' }
+    where: whereClause,
+    include: { 
+      submissions: {
+        select: { id: true, studentId: true, status: true, grade: true } // Optimization: Don't fetch full blobs
+      } 
+    },
+    orderBy: { dueDate: 'asc' } // Show nearest due date first
   });
 };
 
@@ -38,7 +49,7 @@ export const submitAssignment = async (studentId: string, assignmentId: number, 
     data: {
       studentId,
       assignmentId,
-      fileUrl: file ? file.path : null, // Store file path
+      fileUrl: file ? file.path : null,
       content: content || null
     }
   });
@@ -52,8 +63,8 @@ export const gradeSubmission = async (submissionId: number, grade: number, feedb
     data: { grade, feedback }
   });
 
-  // REAL-TIME NOTIFICATION: Notify specific student
-  io.to(`student_${submission.studentId}`).emit('grade_posted', {
+  // FIX: Use getIO() here too
+  getIO().to(`student_${submission.studentId}`).emit('grade_posted', {
     message: `Your assignment has been graded.`,
     grade: grade
   });
@@ -61,7 +72,7 @@ export const gradeSubmission = async (submissionId: number, grade: number, feedb
   return submission;
 };
 
-// === MATERIALS (Lecture Slides) ===
+// === MATERIALS ===
 
 export const uploadMaterial = async (classId: number, title: string, file: Express.Multer.File) => {
   return await prisma.subjectMaterial.create({
