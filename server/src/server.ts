@@ -3,7 +3,7 @@ import dotenv from 'dotenv';
 import express from 'express';
 import http from 'http';
 import path from 'path';
-import { initSocket } from './lib/socket'; // <--- NEW IMPORT
+import { initSocket } from './lib/socket'; // Import the singleton initializer
 
 // Import Routes
 import analyticsRoutes from './routes/analytics.routes';
@@ -24,8 +24,9 @@ dotenv.config();
 const app = express();
 const httpServer = http.createServer(app);
 
-// Initialize Socket.io (Decoupled)
-export const io = initSocket(httpServer); // <--- FIXED INITIALIZATION
+// CRITICAL FIX: We initialize the socket, but we DO NOT export it.
+// This prevents other files from creating a circular dependency loop.
+const io = initSocket(httpServer); 
 
 app.use(cors());
 app.use(express.json());
@@ -47,7 +48,7 @@ app.use('/api/portal', portalRoutes);
 app.use('/api/teacher-portal', teacherPortalRoutes);
 app.use('/api/lms', lmsRoutes);
 
-// Socket.io Logic 
+// Socket.io Global Events
 io.on('connection', (socket) => {
   console.log(`User Connected: ${socket.id}`);
   

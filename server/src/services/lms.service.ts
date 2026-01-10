@@ -1,52 +1,63 @@
-import { getIO } from '../lib/socket';
+import { getIO } from '../lib/socket'; // <--- Import from lib
 import prisma from '../utils/prisma';
 
-export const createAssignment = async (classId: number, data: any) => {
-  const assignment = await prisma.assignment.create({
-    data: {
-      title: data.title,
-      description: data.description,
-      dueDate: new Date(data.dueDate),
-      maxScore: parseFloat(data.maxScore),
-      classId: classId
+// === ASSIGNMENTS ===
+
+export const createAssignment = async (classId: number, data: any, file?: Express.Multer.File) => {
+  return await prisma.$transaction(async (tx) => {
+    // 1. Create Assignment
+    const assignment = await tx.assignment.create({
+      data: {
+        title: data.title,
+        description: data.description,
+        dueDate: new Date(data.dueDate),
+        maxScore: parseFloat(data.maxScore),
+        classId: classId,
+        fileUrl: file ? file.path : null, // Store path if file exists
+        fileType: file ? file.mimetype : null
+      }
+    });
+
+    // 2. Notify Students (Safe Socket Call)
+    try {
+      getIO().to(`class_${classId}`).emit('new_assignment', {
+        title: `New Assignment: ${data.title}`,
+        assignmentId: assignment.id,
+        dueDate: assignment.dueDate
+      });
+    } catch (e) {
+      console.warn("Socket not ready, skipping notification");
     }
-  });
 
-  // FIX: Use getIO() instead of direct export
-  getIO().to(`class_${classId}`).emit('new_assignment', {
-    message: `New Assignment: ${data.title}`,
-    assignmentId: assignment.id
+    return assignment;
   });
-
-  return assignment;
 };
 
-/**
- * Fetch assignments with advanced filtering (Active vs Past).
- */
-export const getClassAssignments = async (classId: number, filter: 'all' | 'active' | 'past' = 'all') => {
-  const now = new Date();
-  
-  const whereClause: any = { classId };
-  if (filter === 'active') whereClause.dueDate = { gte: now };
-  if (filter === 'past') whereClause.dueDate = { lt: now };
-
+export const getClassAssignments = async (classId: number) => {
   return await prisma.assignment.findMany({
-    where: whereClause,
-    include: { 
-      submissions: {
-        select: { id: true, studentId: true, status: true, grade: true } // Optimization: Don't fetch full blobs
-      } 
-    },
-    orderBy: { dueDate: 'asc' } // Show nearest due date first
+    where: { classId },
+    include: { submissions: true },
+    orderBy: { createdAt: 'desc' }
   });
 };
 
 // === SUBMISSIONS ===
 
 export const submitAssignment = async (studentId: string, assignmentId: number, file: Express.Multer.File | undefined, content?: string) => {
-  const submission = await prisma.submission.create({
-    data: {
+  // Logic: Use Upsert to allow re-submissions
+  const submission = await prisma.submission.upsert({
+    where: {
+      studentId_assignmentId: {
+        studentId,
+        assignmentId
+      }
+    },
+    update: {
+      fileUrl: file ? file.path : undefined,
+      content: content || undefined,
+      submittedAt: new Date()
+    },
+    create: {
       studentId,
       assignmentId,
       fileUrl: file ? file.path : null,
@@ -63,11 +74,16 @@ export const gradeSubmission = async (submissionId: number, grade: number, feedb
     data: { grade, feedback }
   });
 
-  // FIX: Use getIO() here too
-  getIO().to(`student_${submission.studentId}`).emit('grade_posted', {
-    message: `Your assignment has been graded.`,
-    grade: grade
-  });
+  // Notify Student
+  try {
+    getIO().to(`student_${submission.studentId}`).emit('grade_posted', {
+      message: `New Grade: ${grade}`,
+      assignmentId: submission.assignmentId,
+      feedback
+    });
+  } catch (e) {
+    console.warn("Socket not ready");
+  }
 
   return submission;
 };

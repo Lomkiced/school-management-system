@@ -15,7 +15,7 @@ export const initSocket = (httpServer: HttpServer) => {
 
 export const getIO = () => {
   if (!io) {
-    throw new Error("Socket.io not initialized!");
+    throw new Error("Socket.io not initialized! Call initSocket first.");
   }
   return io;
 };
