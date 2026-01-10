@@ -2,6 +2,9 @@ import { useEffect } from 'react';
 import { Navigate, Route, BrowserRouter as Router, Routes } from 'react-router-dom';
 import { useAuthStore } from './store/authStore';
 
+// === IMPORT THE ERROR BOUNDARY ===
+import { ErrorBoundary } from './components/ui/ErrorBoundary';
+
 // Layouts
 import { DashboardLayout } from './components/layout/DashboardLayout';
 import { StudentLayout } from './components/layout/StudentLayout';
@@ -38,65 +41,64 @@ import { Toaster } from 'sonner';
 import { Settings } from './features/settings/Settings';
 
 function App() {
-  // 1. Get the initialize function from our store
   const initialize = useAuthStore((state) => state.initialize);
 
-  // 2. Check for an existing login token immediately when the app loads
   useEffect(() => {
     initialize();
   }, [initialize]);
 
   return (
-    <Router>
-      {/* 2. ADD THIS LINE HERE (Inside Router, before Routes) */}
-      <Toaster position="top-right" richColors closeButton />
-      <Routes>
-        {/* === PUBLIC ROUTES === */}
-        <Route path="/login" element={<LoginForm />} />
+    // === WRAP THE ENTIRE APP IN ERROR BOUNDARY ===
+    <ErrorBoundary>
+      <Router>
+        <Toaster position="top-right" richColors closeButton />
+        <Routes>
+          {/* === PUBLIC ROUTES === */}
+          <Route path="/login" element={<LoginForm />} />
 
-        {/* === ADMIN PORTAL (Protected by DashboardLayout) === */}
-        <Route element={<DashboardLayout />}>
-          <Route path="/dashboard" element={<Dashboard />} />
-          
-          {/* Student Management */}
-          <Route path="/students" element={<StudentList />} />
-          <Route path="/students/new" element={<AddStudent />} />
-          <Route path="/students/enroll" element={<EnrollStudent />} />
-          
-          {/* Teacher Management */}
-          <Route path="/teachers" element={<TeacherList />} />
-          <Route path="/teachers/new" element={<AddTeacher />} />
-          
-          {/* Class & Academic Management */}
-          <Route path="/classes" element={<ClassList />} />
-          <Route path="/classes/new" element={<AddClass />} />
-          <Route path="/classes/:classId/grading" element={<Gradebook />} />
+          {/* === ADMIN PORTAL === */}
+          <Route element={<DashboardLayout />}>
+            <Route path="/dashboard" element={<Dashboard />} />
+            
+            {/* Student Management */}
+            <Route path="/students" element={<StudentList />} />
+            <Route path="/students/new" element={<AddStudent />} />
+            <Route path="/students/enroll" element={<EnrollStudent />} />
+            
+            {/* Teacher Management */}
+            <Route path="/teachers" element={<TeacherList />} />
+            <Route path="/teachers/new" element={<AddTeacher />} />
+            
+            {/* Class & Academic Management */}
+            <Route path="/classes" element={<ClassList />} />
+            <Route path="/classes/new" element={<AddClass />} />
+            <Route path="/classes/:classId/grading" element={<Gradebook />} />
 
-          {/* Financial Management */}
-          <Route path="/finance" element={<FeeList />} />
-          <Route path="/students/:studentId/ledger" element={<StudentLedger />} />
+            {/* Financial Management */}
+            <Route path="/finance" element={<FeeList />} />
+            <Route path="/students/:studentId/ledger" element={<StudentLedger />} />
 
-          {/* System Settings (MOVED HERE so the Sidebar stays visible) */}
-          <Route path="/settings" element={<Settings />} />
-        </Route>
+            {/* System Settings */}
+            <Route path="/settings" element={<Settings />} />
+          </Route>
 
-        {/* === STUDENT PORTAL (Protected by StudentLayout) === */}
-        <Route path="/student" element={<StudentLayout />}>
-          <Route path="dashboard" element={<div className="text-2xl font-bold">Welcome, Student!</div>} />
-          <Route path="grades" element={<StudentGrades />} />
-        </Route>
+          {/* === STUDENT PORTAL === */}
+          <Route path="/student" element={<StudentLayout />}>
+            <Route path="dashboard" element={<div className="text-2xl font-bold">Welcome, Student!</div>} />
+            <Route path="grades" element={<StudentGrades />} />
+          </Route>
 
-        {/* === TEACHER PORTAL (Protected by TeacherLayout) === */}
-        <Route path="/teacher" element={<TeacherLayout />}>
-          <Route path="dashboard" element={<TeacherDashboard />} />
-          {/* Reuse the Gradebook component! */}
-          <Route path="grading/:classId" element={<Gradebook />} />
-        </Route>
+          {/* === TEACHER PORTAL === */}
+          <Route path="/teacher" element={<TeacherLayout />}>
+            <Route path="dashboard" element={<TeacherDashboard />} />
+            <Route path="grading/:classId" element={<Gradebook />} />
+          </Route>
 
-        {/* === DEFAULT REDIRECT === */}
-        <Route path="/" element={<Navigate to="/login" replace />} />
-      </Routes>
-    </Router>
+          {/* === DEFAULT REDIRECT === */}
+          <Route path="/" element={<Navigate to="/login" replace />} />
+        </Routes>
+      </Router>
+    </ErrorBoundary>
   );
 }
 

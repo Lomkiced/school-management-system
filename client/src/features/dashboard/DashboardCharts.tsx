@@ -1,77 +1,86 @@
-import { Bar, BarChart, CartesianGrid, Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 
-const COLORS = ['#4f46e5', '#ec4899', '#10b981', '#f59e0b'];
+export const DashboardCharts = ({ financials, demographics }: any) => {
+  // Safe defaults inside the component as a double-check
+  const revenue = financials?.revenue || 0;
+  const pending = financials?.pending || 0;
+  const total = revenue + pending || 1; // Prevent divide by zero
 
-interface Props {
-  financials: { revenue: number; pending: number };
-  demographics: { gender: string; _count: { gender: number } }[];
-}
-
-export const DashboardCharts = ({ financials, demographics }: Props) => {
-  
-  // Prepare Data for Financial Bar Chart
-  const financeData = [
-    { name: 'Collected', amount: financials.revenue, fill: '#10b981' }, // Green
-    { name: 'Pending', amount: financials.pending, fill: '#ef4444' },   // Red
-  ];
-
-  // Prepare Data for Demographic Pie Chart
-  const demoData = demographics.map((d) => ({
-    name: d.gender,
-    value: d._count.gender
-  }));
-
-  // Formatter for Currency
-  const formatMoney = (value: number) => `₱${value.toLocaleString()}`;
+  // Simple calculation for gender bars
+  const boys = demographics?.find((d: any) => d.gender === 'MALE')?._count || 0;
+  const girls = demographics?.find((d: any) => d.gender === 'FEMALE')?._count || 0;
+  const totalStudents = boys + girls || 1;
 
   return (
-    <div className="grid gap-4 md:grid-cols-2">
-      {/* 1. FINANCIAL CHART */}
+    <div className="grid gap-6">
+      
+      {/* FINANCIAL HEALTH CHART */}
       <Card>
         <CardHeader>
           <CardTitle>Financial Overview</CardTitle>
-          <p className="text-sm text-slate-500">Revenue vs. Outstanding Balances</p>
         </CardHeader>
-        <CardContent className="h-[300px]">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={financeData} layout="vertical" margin={{ left: 20 }}>
-              <CartesianGrid strokeDasharray="3 3" horizontal={false} />
-              <XAxis type="number" hide />
-              <YAxis dataKey="name" type="category" width={80} tick={{fontSize: 12}} />
-              <Tooltip formatter={(value: number) => formatMoney(value)} cursor={{fill: 'transparent'}} />
-              <Bar dataKey="amount" radius={[0, 4, 4, 0]} barSize={40} />
-            </BarChart>
-          </ResponsiveContainer>
+        <CardContent>
+          <div className="space-y-4">
+            {/* Custom Progress Bar for Revenue */}
+            <div className="space-y-1">
+              <div className="flex justify-between text-sm font-medium">
+                <span>Collected Revenue</span>
+                <span className="text-emerald-600">₱{revenue.toLocaleString()}</span>
+              </div>
+              <div className="h-3 w-full bg-slate-100 rounded-full overflow-hidden">
+                <div 
+                  className="h-full bg-emerald-500 rounded-full transition-all duration-1000" 
+                  style={{ width: `${Math.min((revenue / total) * 100, 100)}%` }}
+                />
+              </div>
+            </div>
+
+            {/* Custom Progress Bar for Pending */}
+            <div className="space-y-1">
+              <div className="flex justify-between text-sm font-medium">
+                <span>Pending Fees</span>
+                <span className="text-amber-600">₱{pending.toLocaleString()}</span>
+              </div>
+              <div className="h-3 w-full bg-slate-100 rounded-full overflow-hidden">
+                <div 
+                  className="h-full bg-amber-500 rounded-full transition-all duration-1000" 
+                  style={{ width: `${Math.min((pending / total) * 100, 100)}%` }}
+                />
+              </div>
+            </div>
+          </div>
         </CardContent>
       </Card>
 
-      {/* 2. DEMOGRAPHIC CHART */}
+      {/* DEMOGRAPHICS CHART */}
       <Card>
         <CardHeader>
-          <CardTitle>Student Population</CardTitle>
-          <p className="text-sm text-slate-500">Gender Distribution</p>
+          <CardTitle>Student Demographics</CardTitle>
         </CardHeader>
-        <CardContent className="h-[300px]">
-          <ResponsiveContainer width="100%" height="100%">
-            <PieChart>
-              <Pie
-                data={demoData}
-                cx="50%"
-                cy="50%"
-                innerRadius={60}
-                outerRadius={80}
-                paddingAngle={5}
-                dataKey="value"
-              >
-                {demoData.map((entry, index) => (
-                  <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                ))}
-              </Pie>
-              <Tooltip />
-              <Legend verticalAlign="bottom" height={36} />
-            </PieChart>
-          </ResponsiveContainer>
+        <CardContent>
+          <div className="flex items-center gap-4 pt-4">
+             {/* Circular CSS Chart */}
+             <div className="relative h-32 w-32 flex items-center justify-center rounded-full border-8 border-slate-100">
+                <div className="absolute inset-0 rounded-full border-8 border-indigo-500" 
+                     style={{ clipPath: `polygon(0 0, 100% 0, 100% ${Math.min((boys / totalStudents) * 100, 100)}%, 0 100%)` }}>
+                </div>
+                <div className="text-center">
+                  <span className="block text-2xl font-bold">{boys + girls}</span>
+                  <span className="text-xs text-slate-500">Students</span>
+                </div>
+             </div>
+             
+             <div className="space-y-2 flex-1">
+                <div className="flex items-center gap-2">
+                   <div className="h-3 w-3 rounded-full bg-indigo-500"></div>
+                   <span className="text-sm text-slate-600">Boys ({boys})</span>
+                </div>
+                <div className="flex items-center gap-2">
+                   <div className="h-3 w-3 rounded-full bg-slate-200"></div>
+                   <span className="text-sm text-slate-600">Girls ({girls})</span>
+                </div>
+             </div>
+          </div>
         </CardContent>
       </Card>
     </div>
