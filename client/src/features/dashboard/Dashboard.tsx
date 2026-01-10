@@ -4,18 +4,18 @@ import {
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Button } from '../../components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Skeleton } from '../../components/ui/skeleton';
 import api from '../../lib/axios';
 import { DashboardCharts } from './DashboardCharts';
 
-// --- Safe StatCard Component ---
+// Safe component for displaying stats
 const StatCard = ({ title, value, icon: Icon, trend, trendValue, color }: any) => (
-  <Card className="border-l-4 shadow-sm" style={{ borderLeftColor: color }}>
+  <Card className="border-l-4 shadow-sm" style={{ borderLeftColor: color || '#cbd5e1' }}>
     <CardContent className="p-6">
       <div className="flex items-center justify-between space-y-0 pb-2">
         <p className="text-sm font-medium text-slate-500">{title}</p>
-        <div className={`p-2 rounded-full bg-slate-50`}>
+        <div className="p-2 rounded-full bg-slate-50">
           <Icon className="h-4 w-4" style={{ color: color }} />
         </div>
       </div>
@@ -33,7 +33,7 @@ const StatCard = ({ title, value, icon: Icon, trend, trendValue, color }: any) =
 );
 
 export const Dashboard = () => {
-  // 1. Initialize with SAFE empty defaults to prevent "Undefined" errors
+  // 1. Safe Default State
   const [stats, setStats] = useState({
     counts: { students: 0, teachers: 0, classes: 0 },
     financials: { revenue: 0, pending: 0, history: [] },
@@ -43,51 +43,35 @@ export const Dashboard = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
 
-  const fetchStats = async () => {
-    try {
-      const res = await api.get('/analytics');
-      // 2. Double check if data actually exists before setting
-      if (res.data) {
-        setStats({
-            counts: res.data.counts || { students: 0, teachers: 0, classes: 0 },
-            financials: res.data.financials || { revenue: 0, pending: 0, history: [] },
-            activity: res.data.activity || [],
-            demographics: res.data.demographics || []
-        });
-      }
-    } catch (error) {
-      console.error("Dashboard failed to load:", error);
-      setError(true);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   useEffect(() => {
-    fetchStats();
+    const loadData = async () => {
+      try {
+        const res = await api.get('/analytics');
+        // 2. Merge defaults with response to prevent undefined errors
+        setStats(prev => ({ ...prev, ...(res.data || {}) }));
+      } catch (err) {
+        console.error("Dashboard Load Failed:", err);
+        setError(true);
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadData();
   }, []);
 
   const formatMoney = (amount: number) => 
     new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' }).format(amount || 0);
 
   if (loading) return (
-    <div className="space-y-6 p-8">
-      <Skeleton className="h-10 w-1/3" />
+    <div className="p-8 space-y-6">
+      <Skeleton className="h-10 w-48" />
       <div className="grid gap-4 md:grid-cols-4">
-         {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-32 rounded-xl" />)}
+        {[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-32 rounded-xl" />)}
       </div>
     </div>
   );
 
-  // 3. Fallback UI if API fails completely
-  if (error) return (
-      <div className="p-8 text-center">
-          <h2 className="text-xl font-bold text-red-600">Failed to load Dashboard Data</h2>
-          <p className="text-slate-500">The server analytics endpoint is not responding.</p>
-          <Button onClick={fetchStats} className="mt-4">Retry Connection</Button>
-      </div>
-  );
-
+  // 3. Render Dashboard with whatever data we have (Safe Access)
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -103,77 +87,36 @@ export const Dashboard = () => {
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <StatCard 
-          title="Total Students" 
-          value={stats.counts.students} 
-          icon={Users} 
-          trend="up" 
-          trendValue="Active"
-          color="#2563eb"
-        />
-        <StatCard 
-          title="Total Teachers" 
-          value={stats.counts.teachers} 
-          icon={UserCheck} 
-          trend="up" 
-          trendValue="Active"
-          color="#16a34a" 
-        />
-        <StatCard 
-          title="Active Sections" 
-          value={stats.counts.classes} 
-          icon={BookOpen} 
-          trend="down" 
-          trendValue="Current Term"
-          color="#ea580c" 
-        />
-        <StatCard 
-          title="Total Revenue" 
-          value={formatMoney(stats.financials.revenue)} 
-          icon={DollarSign} 
-          trend="up" 
-          trendValue="YTD"
-          color="#9333ea" 
-        />
+        <StatCard title="Total Students" value={stats.counts?.students || 0} icon={Users} color="#2563eb" />
+        <StatCard title="Total Teachers" value={stats.counts?.teachers || 0} icon={UserCheck} color="#16a34a" />
+        <StatCard title="Active Sections" value={stats.counts?.classes || 0} icon={BookOpen} color="#ea580c" />
+        <StatCard title="Total Revenue" value={formatMoney(stats.financials?.revenue)} icon={DollarSign} color="#9333ea" />
       </div>
 
       <div className="grid gap-6 md:grid-cols-7">
         <div className="md:col-span-4">
-           {/* 4. Pass safe data to charts */}
-           <DashboardCharts 
-             financials={stats.financials} 
-             demographics={stats.demographics} 
-           />
+          <DashboardCharts 
+             financials={stats.financials || {}} 
+             demographics={stats.demographics || []} 
+          />
         </div>
-        
-        <Card className="md:col-span-3 h-full">
+        <Card className="md:col-span-3">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <Activity className="h-5 w-5 text-indigo-600" /> Live Feed
+              <Activity className="h-5 w-5 text-indigo-600" /> Recent Activity
             </CardTitle>
-            <CardDescription>Latest system events</CardDescription>
           </CardHeader>
           <CardContent>
-            {stats.activity.length === 0 ? (
-              <p className="text-center text-slate-400 py-8">No recent activity</p>
+            {!stats.activity?.length ? (
+              <p className="text-sm text-slate-400">No recent activity logged.</p>
             ) : (
-              <div className="space-y-6">
+              <div className="space-y-4">
                 {stats.activity.slice(0, 5).map((item: any, i: number) => (
-                  <div key={i} className="flex gap-4 relative">
-                    {i !== stats.activity.length - 1 && (
-                      <div className="absolute left-[11px] top-8 bottom-[-24px] w-0.5 bg-slate-200"></div>
-                    )}
-                    <div className="relative z-10 flex h-6 w-6 items-center justify-center rounded-full bg-blue-100 ring-4 ring-white">
-                      <Users className="h-3 w-3 text-blue-600" />
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium text-slate-900">
-                        Activity: <span className="text-indigo-600">{item.action || 'Event'}</span>
-                      </p>
-                      <p className="text-xs text-slate-500">
-                        {item.createdAt ? new Date(item.createdAt).toLocaleDateString() : 'Just now'}
-                      </p>
-                    </div>
+                  <div key={i} className="text-sm border-l-2 border-indigo-100 pl-3 py-1">
+                    <p className="font-medium text-slate-800">{item.action}</p>
+                    <p className="text-xs text-slate-500">
+                      {item.createdAt ? new Date(item.createdAt).toLocaleDateString() : 'Just now'}
+                    </p>
                   </div>
                 ))}
               </div>
