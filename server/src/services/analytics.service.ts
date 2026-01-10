@@ -1,3 +1,4 @@
+import { getIO } from '../lib/socket';
 import prisma from '../utils/prisma';
 
 export const getDashboardStats = async () => {
@@ -91,4 +92,16 @@ export const getDashboardStats = async () => {
     demographics,
     activity
   };
+};
+
+// If you have a function that emits stats updates, update it:
+export const emitLiveStats = async () => {
+  const stats = await getDashboardStats();
+  
+  try {
+    // FIX: Use getIO() instead of io
+    getIO().emit('dashboard_update', stats);
+  } catch (error) {
+    console.warn("Socket not initialized yet, skipping broadcast");
+  }
 };
