@@ -1,25 +1,17 @@
-// FILE: client/src/components/layout/StudentLayout.tsx
+// client/src/components/layout/StudentLayout.tsx
 import { Outlet } from 'react-router-dom';
-import { cn } from '../../lib/utils';
-import { useSidebarStore } from '../../store/sidebarStore';
-import { StudentSidebar } from './StudentSidebar';
+import { Sidebar } from './Sidebar';
 
-export const StudentLayout = () => {
-  const { isExpanded } = useSidebarStore();
-
+const StudentLayout = () => {
   return (
-    <div className="min-h-screen bg-slate-50/50">
-      <StudentSidebar />
-      <main 
-        className={cn(
-          "pt-16 md:pt-0 w-full min-h-screen transition-all duration-300 ease-in-out",
-          isExpanded ? "md:pl-64" : "md:pl-[70px]"
-        )}
-      >
-        <div className="container mx-auto p-6 md:p-8 max-w-7xl animate-in fade-in duration-500">
+    <div className="flex bg-slate-50 min-h-screen font-sans">
+      <Sidebar />
+      <main className="flex-1 ml-64 p-8 animate-in fade-in duration-500">
+        <div className="max-w-5xl mx-auto">
           <Outlet />
         </div>
       </main>
     </div>
   );
 };
+export default StudentLayout;

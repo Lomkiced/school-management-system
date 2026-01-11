@@ -1,35 +1,17 @@
-// FILE: client/src/components/layout/DashboardLayout.tsx
-import { Navigate, Outlet } from 'react-router-dom';
-import { cn } from '../../lib/utils';
-import { useAuthStore } from '../../store/authStore';
-import { useSidebarStore } from '../../store/sidebarStore'; // Import the store
+// client/src/components/layout/DashboardLayout.tsx
+import { Outlet } from 'react-router-dom';
 import { Sidebar } from './Sidebar';
 
-export const DashboardLayout = () => {
-  const { user, token } = useAuthStore();
-  const { isExpanded } = useSidebarStore(); // Listen to global state
-
-  if (!token || !user) {
-    return <Navigate to="/login" replace />;
-  }
-
+const DashboardLayout = () => {
   return (
-    <div className="min-h-screen bg-slate-50/50">
-      {/* 1. The Fixed Sidebar */}
+    <div className="flex bg-slate-50 min-h-screen font-sans">
       <Sidebar />
-
-      {/* 2. Main Content Area with Dynamic Padding */}
-      {/* Moves content to the right when sidebar expands */}
-      <main 
-        className={cn(
-          "pt-16 md:pt-0 w-full min-h-screen transition-all duration-300 ease-in-out",
-          isExpanded ? "md:pl-64" : "md:pl-[70px]"
-        )}
-      >
-        <div className="container mx-auto p-6 md:p-8 max-w-7xl animate-in fade-in duration-500">
+      <main className="flex-1 ml-64 p-8 animate-in fade-in duration-500">
+        <div className="max-w-7xl mx-auto">
           <Outlet />
         </div>
       </main>
     </div>
   );
 };
+export default DashboardLayout;

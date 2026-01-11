@@ -1,17 +1,52 @@
 // FILE: client/src/components/layout/Sidebar.tsx
-import { BarChart3, GraduationCap, LayoutDashboard, Settings, Users, Wallet } from 'lucide-react';
+import {
+  BookOpen,
+  CalendarCheck,
+  DollarSign,
+  GraduationCap,
+  LayoutDashboard,
+  Settings,
+  Users,
+  Users2
+} from 'lucide-react';
+import { useAuthStore } from '../../store/authStore';
 import { SidebarShell } from './SidebarShell';
 
-// Fix: Explicitly export the component so DashboardLayout can find it
 export const Sidebar = () => {
-  const adminLinks = [
-    { label: 'Overview', href: '/dashboard', icon: LayoutDashboard, color: 'text-indigo-500' },
-    { label: 'Students', href: '/students', icon: Users, color: 'text-blue-500' },
-    { label: 'Teachers', href: '/teachers', icon: GraduationCap, color: 'text-emerald-500' },
-    { label: 'Classes', href: '/classes', icon: BarChart3, color: 'text-orange-500' },
-    { label: 'Finance', href: '/finance', icon: Wallet, color: 'text-purple-500' },
-    { label: 'Settings', href: '/settings', icon: Settings, color: 'text-slate-500' },
-  ];
+  const { user } = useAuthStore();
+  const role = user?.role || 'GUEST';
 
-  return <SidebarShell title="Admin Portal" links={adminLinks} colorTheme="indigo" />;
+  // --- 1. Define Menus per Role ---
+  const MENUS = {
+    ADMIN: [
+      { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+      { href: '/students', label: 'Students', icon: GraduationCap },
+      { href: '/teachers', label: 'Teachers', icon: Users },
+      { href: '/parents', label: 'Parents', icon: Users2 },
+      { href: '/classes', label: 'Classes', icon: BookOpen },
+      { href: '/finance', label: 'Finance', icon: DollarSign },
+      { href: '/settings', label: 'Settings', icon: Settings },
+    ],
+    TEACHER: [
+      { href: '/teacher/dashboard', label: 'Overview', icon: LayoutDashboard },
+      // Teachers see their specific classes on the dashboard usually, 
+      // but we can add direct links if needed.
+    ],
+    STUDENT: [
+      { href: '/student/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+      { href: '/student/grades', label: 'My Grades', icon: CalendarCheck },
+    ],
+    PARENT: [
+      { href: '/parent/dashboard', label: 'Family Overview', icon: Users2 },
+    ]
+  };
+
+  // --- 2. Select the correct menu ---
+  // @ts-ignore - Ignore TS error if role doesn't match specific key
+  const links = MENUS[role] || MENUS.ADMIN; 
+
+  // --- 3. Render the Shell ---
+  // The Shell handles the UI (Logo, Logout button, CSS styles)
+  // We just pass the data (links)
+  return <SidebarShell links={links} />;
 };
