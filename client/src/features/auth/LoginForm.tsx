@@ -1,3 +1,4 @@
+// FILE: client/src/features/auth/LoginForm.tsx
 import { zodResolver } from '@hookform/resolvers/zod';
 import { AlertCircle, Loader2 } from 'lucide-react';
 import { useState } from 'react';
@@ -12,6 +13,7 @@ import { Input } from '@/components/ui/input';
 import api from '@/lib/axios';
 import { useAuthStore } from '@/store/authStore';
 
+// Strict Validation Schema
 const loginSchema = z.object({
   email: z.string().email('Please enter a valid email'),
   password: z.string().min(1, 'Password is required'),
@@ -36,43 +38,40 @@ export default function LoginForm() {
   const onSubmit = async (data: LoginFormData) => {
     setIsLoading(true);
     setErrorMessage(null);
-    console.log("🚀 STARTING LOGIN...");
 
     try {
-      // 1. Send Request
+      // 1. Send Login Request
       const response = await api.post('/auth/login', {
         email: data.email.trim(),
         password: data.password.trim()
       });
 
-      console.log("📥 Raw Response:", response);
+      // 2. Defensive Data Extraction
+      // We safely check nested properties to avoid "undefined" access errors
+      const responseData = response.data || {};
+      const payload = responseData.data || responseData; // Handle variations in API structure
 
-      // 2. SMART DATA EXTRACTION (The Fix)
-      // This handles if axios interceptors are used OR not used
-      const responseData = response.data || response;
-      
-      // Look for user/token in different common places
-      const user = responseData.user || responseData.data?.user;
-      const token = responseData.token || responseData.data?.token;
+      // Check for Token & User existence
+      const token = payload.token || payload.accessToken;
+      const user = payload.user || payload.userData;
 
-      console.log("🕵️ Extracted Data:", { user, token });
-
-      // 3. Validation
-      if (!user || !token) {
-        console.error("❌ Data missing from response. Structure received:", responseData);
-        throw new Error("Server response was successful but missing User or Token data.");
+      if (!token || !user) {
+        throw new Error('Login successful but server response is invalid (missing credentials).');
       }
 
-      // 4. Save to Store
+      // 3. Update Global Store
       login(user, token);
-      toast.success(`Welcome back, ${user.firstName || 'User'}!`);
 
-      // 5. Case-Insensitive Routing
-      // We convert role to UPPERCASE to be safe
-      const role = (user.role || '').toUpperCase();
-      console.log("🧭 Routing for Role:", role);
+      // 4. Safe UI Feedback (CRITICAL FIX FOR CRASH)
+      // Force conversion to String to prevent "Object to Primitive" errors
+      const safeFirstName = user.firstName ? String(user.firstName) : 'User';
+      toast.success(`Welcome back, ${safeFirstName}!`);
 
-      switch (role) {
+      // 5. Intelligent Routing
+      // Normalize role to ensure case-insensitivity matches
+      const rawRole = user.role ? String(user.role).toUpperCase() : '';
+      
+      switch (rawRole) {
         case 'SUPER_ADMIN':
         case 'ADMIN':
           navigate('/dashboard');
@@ -87,28 +86,52 @@ export default function LoginForm() {
           navigate('/parent/dashboard');
           break;
         default:
-          console.warn("⚠️ Unknown role:", role);
-          navigate('/');
+          // Fallback for unknown roles to prevent getting stuck on login
+          console.warn(`Unknown role detected: ${rawRole}. Redirecting to default dashboard.`);
+          navigate('/dashboard');
+          break;
       }
 
     } catch (error: any) {
-      console.error("🔥 LOGIN CRASH:", error);
+      console.error("Login Process Error:", error);
       
-      let msg = "An unexpected error occurred.";
-      
+      // 6. Advanced Error Sanitization (The "Anti-Crash" Logic)
+      let displayMsg = "An unexpected error occurred.";
+
       if (error.response) {
-        // Server responded with 400/401/500
-        msg = error.response.data?.message || `Server Error (${error.response.status})`;
+        // Server returned an error (4xx, 5xx)
+        const data = error.response.data;
+        
+        if (data) {
+            if (typeof data === 'string') {
+                displayMsg = data;
+            } else if (typeof data.message === 'string') {
+                displayMsg = data.message;
+            } else if (Array.isArray(data.errors)) {
+                // If backend returns an array of validation errors
+                displayMsg = data.errors.map((e: any) => 
+                    typeof e === 'string' ? e : e.message || JSON.stringify(e)
+                ).join(', ');
+            } else if (typeof data.message === 'object') {
+                // If message is an object, stringify it safely
+                displayMsg = JSON.stringify(data.message);
+            }
+        } else {
+            displayMsg = `Server Error (${error.response.status})`;
+        }
       } else if (error.request) {
-        // Server unreachable
-        msg = "Cannot connect to server. Is the backend running?";
-      } else {
-        // Code error
-        msg = error.message;
+        // Request made but no response received
+        displayMsg = "Cannot reach the server. Please check your internet connection.";
+      } else if (error.message) {
+        // Generic JS error
+        displayMsg = String(error.message);
       }
+
+      // Final Safety Net: Ensure strictly string type
+      const safeErrorMsg = String(displayMsg);
       
-      setErrorMessage(msg);
-      toast.error(msg);
+      setErrorMessage(safeErrorMsg);
+      toast.error(safeErrorMsg);
     } finally {
       setIsLoading(false);
     }
@@ -116,16 +139,16 @@ export default function LoginForm() {
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-slate-100 p-4">
-      <Card className="w-full max-w-md shadow-2xl">
+      <Card className="w-full max-w-md shadow-2xl animate-in fade-in zoom-in-95 duration-300">
         <CardHeader className="space-y-1 text-center">
           <CardTitle className="text-2xl font-bold text-slate-900">School Portal</CardTitle>
           <CardDescription>Enter your credentials to access your account</CardDescription>
         </CardHeader>
         <CardContent>
           {errorMessage && (
-            <div className="mb-4 flex items-center gap-2 rounded-md bg-red-50 p-3 text-sm text-red-600 border border-red-200">
-              <AlertCircle className="h-4 w-4" />
-              {errorMessage}
+            <div className="mb-4 flex items-start gap-2 rounded-md bg-red-50 p-3 text-sm text-red-600 border border-red-200 animate-in slide-in-from-top-2">
+              <AlertCircle className="h-5 w-5 shrink-0 mt-0.5" />
+              <span className="break-words font-medium">{errorMessage}</span>
             </div>
           )}
           
@@ -136,9 +159,10 @@ export default function LoginForm() {
                 placeholder="name@school.com"
                 {...form.register('email')}
                 disabled={isLoading}
+                className="transition-all focus-visible:ring-indigo-500"
               />
               {form.formState.errors.email && (
-                <p className="text-xs text-red-500">{form.formState.errors.email.message}</p>
+                <p className="text-xs text-red-500 font-medium ml-1">{form.formState.errors.email.message}</p>
               )}
             </div>
             <div className="space-y-2">
@@ -147,12 +171,13 @@ export default function LoginForm() {
                 placeholder="••••••••"
                 {...form.register('password')}
                 disabled={isLoading}
+                className="transition-all focus-visible:ring-indigo-500"
               />
               {form.formState.errors.password && (
-                <p className="text-xs text-red-500">{form.formState.errors.password.message}</p>
+                <p className="text-xs text-red-500 font-medium ml-1">{form.formState.errors.password.message}</p>
               )}
             </div>
-            <Button type="submit" className="w-full bg-slate-900 hover:bg-slate-800" disabled={isLoading}>
+            <Button type="submit" className="w-full bg-slate-900 hover:bg-slate-800 transition-all shadow-md hover:shadow-lg" disabled={isLoading}>
               {isLoading ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />

@@ -5,49 +5,71 @@ import { Toaster } from 'sonner';
 import { ErrorBoundary } from './components/ui/ErrorBoundary';
 import { useAuthStore } from './store/authStore';
 
-// === 1. LAZY LOADING (STANDARD) ===
-// We assume these files use "export default ComponentName"
-// This is the standard, crash-proof way to load routes.
+// === 1. SMART LAZY LOADER ===
+// This helper function automatically finds the component whether it's
+// exported as "default" OR as a named export (like "Dashboard").
+// It prevents the "Cannot convert object to primitive value" crash.
+const load = (importPromise: Promise<any>, name?: string) => {
+  return lazy(() => 
+    importPromise.then(module => {
+      // Case A: Named export found (e.g., export const Dashboard)
+      if (name && module[name]) {
+        return { default: module[name] };
+      }
+      // Case B: Default export found (e.g., export default Dashboard)
+      if (module.default) {
+        return { default: module.default };
+      }
+      // Case C: Fallback (prevents crash, shows error)
+      throw new Error(`Module loaded but component ${name || 'Default'} was not found.`);
+    })
+  );
+};
+
+// === 2. SAFE IMPORTS ===
 
 // Layouts
-const DashboardLayout = lazy(() => import('./components/layout/DashboardLayout').then(module => ({ default: module.DashboardLayout })));
-const StudentLayout = lazy(() => import('./components/layout/StudentLayout').then(module => ({ default: module.StudentLayout })));
-const TeacherLayout = lazy(() => import('./components/layout/TeacherLayout').then(module => ({ default: module.TeacherLayout })));
-// FIX: Standard import for ParentLayout (since we added export default)
-const ParentLayout = lazy(() => import('./components/layout/ParentLayout'));
+const DashboardLayout = load(import('./components/layout/DashboardLayout'), 'DashboardLayout');
+const StudentLayout = load(import('./components/layout/StudentLayout'), 'StudentLayout');
+const TeacherLayout = load(import('./components/layout/TeacherLayout'), 'TeacherLayout');
+const ParentLayout = load(import('./components/layout/ParentLayout'), 'ParentLayout');
 
-// Auth
-const LoginForm = lazy(() => import('./features/auth/LoginForm').then(module => ({ default: module.LoginForm })));
+// Auth (FIXED: Handles Default Export correctly now)
+const LoginForm = load(import('./features/auth/LoginForm'), 'LoginForm');
 
 // Dashboards
-const Dashboard = lazy(() => import('./features/dashboard/Dashboard').then(module => ({ default: module.Dashboard })));
-const StudentDashboard = lazy(() => import('./features/students/StudentDashboard').then(module => ({ default: module.StudentDashboard })));
-const TeacherDashboard = lazy(() => import('./features/teachers/TeacherDashboard').then(module => ({ default: module.TeacherDashboard })));
-const ParentDashboard = lazy(() => import('./features/parent/ParentDashboard').then(module => ({ default: module.ParentDashboard })));
+const Dashboard = load(import('./features/dashboard/Dashboard'), 'Dashboard');
+const StudentDashboard = load(import('./features/students/StudentDashboard'), 'StudentDashboard');
+const TeacherDashboard = load(import('./features/teachers/TeacherDashboard'), 'TeacherDashboard');
+const ParentDashboard = load(import('./features/parent/ParentDashboard'), 'ParentDashboard');
 
 // Features
-const StudentList = lazy(() => import('./features/students/StudentList').then(module => ({ default: module.StudentList })));
-const AddStudent = lazy(() => import('./features/students/AddStudent').then(module => ({ default: module.AddStudent })));
-const EnrollStudent = lazy(() => import('./features/students/EnrollStudent').then(module => ({ default: module.EnrollStudent })));
-const StudentGrades = lazy(() => import('./features/students/StudentGrades').then(module => ({ default: module.StudentGrades })));
-const TeacherList = lazy(() => import('./features/teachers/TeacherList').then(module => ({ default: module.TeacherList })));
-const AddTeacher = lazy(() => import('./features/teachers/AddTeacher').then(module => ({ default: module.AddTeacher })));
-const ClassList = lazy(() => import('./features/classes/ClassList').then(module => ({ default: module.ClassList })));
-const AddClass = lazy(() => import('./features/classes/AddClass').then(module => ({ default: module.AddClass })));
-const Gradebook = lazy(() => import('./features/classes/Gradebook').then(module => ({ default: module.Gradebook })));
-const FeeList = lazy(() => import('./features/finance/FeeList').then(module => ({ default: module.FeeList })));
-const StudentLedger = lazy(() => import('./features/finance/StudentLedger').then(module => ({ default: module.StudentLedger })));
-const Settings = lazy(() => import('./features/settings/Settings').then(module => ({ default: module.Settings })));
+const StudentList = load(import('./features/students/StudentList'), 'StudentList');
+const AddStudent = load(import('./features/students/AddStudent'), 'AddStudent');
+const EnrollStudent = load(import('./features/students/EnrollStudent'), 'EnrollStudent');
+const StudentGrades = load(import('./features/students/StudentGrades'), 'StudentGrades');
+
+const TeacherList = load(import('./features/teachers/TeacherList'), 'TeacherList');
+const AddTeacher = load(import('./features/teachers/AddTeacher'), 'AddTeacher');
+
+const ClassList = load(import('./features/classes/ClassList'), 'ClassList');
+const AddClass = load(import('./features/classes/AddClass'), 'AddClass');
+const Gradebook = load(import('./features/classes/Gradebook'), 'Gradebook');
+
+const FeeList = load(import('./features/finance/FeeList'), 'FeeList');
+const StudentLedger = load(import('./features/finance/StudentLedger'), 'StudentLedger');
+
+const Settings = load(import('./features/settings/Settings'), 'Settings');
 
 // LMS
-const QuizPlayer = lazy(() => import('./features/lms/QuizPlayer').then(module => ({ default: module.QuizPlayer })));
-const QuizBuilder = lazy(() => import('./features/lms/QuizBuilder').then(module => ({ default: module.QuizBuilder })));
+const QuizPlayer = load(import('./features/lms/QuizPlayer'), 'QuizPlayer');
+const QuizBuilder = load(import('./features/lms/QuizBuilder'), 'QuizBuilder');
 
-// === 2. LOADING SCREEN ===
+// === 3. LOADING SCREEN ===
 const LoadingScreen = () => (
   <div className="h-screen w-full flex flex-col items-center justify-center bg-slate-50 gap-4">
     <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-indigo-600"></div>
-    <p className="text-sm text-slate-500">Loading Module...</p>
+    <p className="text-sm text-slate-500">Loading Application...</p>
   </div>
 );
 
