@@ -2,36 +2,22 @@
 import { Request, Response } from 'express';
 import * as analyticsService from '../services/analytics.service';
 
-// Admin Dashboard
-export const getAdminDashboard = async (req: Request, res: Response) => {
+export const getStats = async (req: Request, res: Response) => {
   try {
-    const user = (req as any).user;
-    
-    // Strict Security Check
-    if (user.role !== 'ADMIN' && user.role !== 'SUPER_ADMIN') {
-      return res.status(403).json({ message: "Access Denied: Admins Only" });
-    }
-
-    const data = await analyticsService.getAdminDashboardStats();
-    res.json({ success: true, data });
+    const stats = await analyticsService.getDashboardStats();
+    res.json({ success: true, data: stats });
   } catch (error: any) {
-    console.error("Dashboard Error:", error);
-    res.status(500).json({ success: false, message: error.message });
+    console.error("Stats Error:", error);
+    res.status(500).json({ success: false, message: "Failed to load dashboard stats" });
   }
 };
 
-// Teacher Dashboard
-export const getTeacherDashboard = async (req: Request, res: Response) => {
+export const getCharts = async (req: Request, res: Response) => {
   try {
-    const user = (req as any).user;
-    
-    if (user.role !== 'TEACHER') {
-      return res.status(403).json({ message: "Access Denied: Teachers Only" });
-    }
-
-    const data = await analyticsService.getTeacherAnalytics(user.userId);
-    res.json({ success: true, data });
+    const chartData = await analyticsService.getFinancialChartData();
+    res.json({ success: true, data: chartData });
   } catch (error: any) {
-    res.status(500).json({ success: false, message: error.message });
+    console.error("Chart Error:", error);
+    res.status(500).json({ success: false, message: "Failed to load charts" });
   }
 };

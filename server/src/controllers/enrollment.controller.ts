@@ -1,11 +1,23 @@
+// FILE: server/src/controllers/enrollment.controller.ts
 import { Request, Response } from 'express';
 import * as enrollmentService from '../services/enrollment.service';
 
-export const enroll = async (req: Request, res: Response) => {
+export const enrollBulk = async (req: Request, res: Response) => {
   try {
-    const result = await enrollmentService.enrollStudent(req.body);
+    const { sectionId, studentIds } = req.body;
+
+    // Basic Validation
+    if (!sectionId) {
+      return res.status(400).json({ success: false, message: "Section ID is required" });
+    }
+    if (!Array.isArray(studentIds) || studentIds.length === 0) {
+      return res.status(400).json({ success: false, message: "Please select at least one student." });
+    }
+
+    const result = await enrollmentService.enrollStudentBulk(parseInt(sectionId), studentIds);
     res.status(201).json({ success: true, data: result });
   } catch (error: any) {
+    console.error("Enrollment Error:", error);
     res.status(400).json({ success: false, message: error.message });
   }
 };

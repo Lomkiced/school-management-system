@@ -1,35 +1,80 @@
+// FILE: server/src/services/enrollment.service.ts
 import prisma from '../utils/prisma';
 
-export const enrollStudent = async (data: any) => {
-  // Check if already enrolled in this section
-  const existing = await prisma.enrollment.findFirst({
+export const enrollStudentBulk = async (sectionId: number, studentIds: string[]) => {
+  // 1. Validate Section Exists
+  const section = await prisma.section.findUnique({
+    where: { id: sectionId },
+    include: { 
+      gradeLevel: true, 
+      academicYear: true 
+    }
+  });
+
+  if (!section) throw new Error("Section not found");
+
+  // 2. Filter Duplicates: Find students ALREADY in this section
+  const existingEnrollments = await prisma.enrollment.findMany({
     where: {
-      studentId: data.studentId,
-      sectionId: parseInt(data.sectionId)
-    }
-  });
-
-  if (existing) throw new Error('Student is already enrolled in this section');
-
-  return await prisma.enrollment.create({
-    data: {
-      studentId: data.studentId,
-      sectionId: parseInt(data.sectionId)
+      sectionId: sectionId,
+      studentId: { in: studentIds }
     },
-    include: {
-      section: true,
-      student: true
-    }
+    select: { studentId: true }
   });
+
+  const alreadyEnrolledIds = new Set(existingEnrollments.map(e => e.studentId));
+
+  // 3. Determine who needs to be added
+  const newStudentIds = studentIds.filter(id => !alreadyEnrolledIds.has(id));
+
+  if (newStudentIds.length === 0) {
+    return { 
+      added: 0, 
+      skipped: studentIds.length, 
+      message: "No new enrollments. All selected students are already in this section." 
+    };
+  }
+
+  // 4. Bulk Insert
+  await prisma.enrollment.createMany({
+    data: newStudentIds.map(studentId => ({
+      sectionId,
+      studentId
+    }))
+  });
+
+  return {
+    added: newStudentIds.length,
+    skipped: alreadyEnrolledIds.size,
+    message: `Successfully enrolled ${newStudentIds.length} students.`
+  };
 };
 
-// Helper for dropdowns
 export const getEnrollmentOptions = async () => {
+  // 1. Fetch Active Students Only (Optimized Select)
   const students = await prisma.student.findMany({
+    where: { user: { isActive: true } },
+    select: {
+      id: true,
+      firstName: true,
+      lastName: true,
+      user: { select: { email: true } }
+    },
     orderBy: { lastName: 'asc' }
   });
+
+  // 2. Fetch Sections with Hierarchy
   const sections = await prisma.section.findMany({
-    include: { gradeLevel: true } // Include grade name (e.g., Grade 10)
+    include: {
+      gradeLevel: true,
+      academicYear: true
+    },
+    orderBy: [
+      { academicYear: { startDate: 'desc' } }, // Newest academic years first
+      { gradeLevel: { level: 'asc' } },
+      { name: 'asc' }
+    ]
   });
+
   return { students, sections };
 };

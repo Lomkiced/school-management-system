@@ -1,171 +1,150 @@
+// FILE: client/src/features/dashboard/Dashboard.tsx
 import {
-  Activity, BookOpen, Calendar, DollarSign,
-  UserCheck, Users
-} from 'lucide-react';
+  Activity,
+  BarChart3,
+  Users,
+  Wallet
+} from 'lucide-react'; // Ensure you have these icons
 import { useEffect, useState } from 'react';
-import { Button } from '../../components/ui/button';
+import { toast } from 'sonner';
+
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Skeleton } from '../../components/ui/skeleton';
 import api from '../../lib/axios';
-import { DashboardCharts } from './DashboardCharts';
+import { DashboardCharts } from './DashboardCharts'; // Assuming you have this
 
-// --- Types for Type Safety ---
 interface DashboardStats {
   counts: {
     students: number;
     teachers: number;
     classes: number;
-  };
-  financials: {
     revenue: number;
-    pending: number;
-    history: any[];
   };
-  activity: Array<{
+  recentActivities: {
+    id: number;
     action: string;
+    details: string;
     createdAt: string;
-    user?: string;
-    details?: string;
-  }>;
-  demographics: Array<{
-    name: string;
-    value: number;
-  }>;
+    user: { email: string };
+  }[];
 }
 
-const StatCard = ({ title, value, icon: Icon, color }: any) => (
-  <Card className="relative overflow-hidden border-none shadow-md hover:shadow-xl transition-all duration-300 group">
-    {/* Gradient Background Effect */}
-    <div className="absolute top-0 right-0 -mt-4 -mr-4 w-24 h-24 rounded-full bg-gradient-to-br from-white/0 to-current opacity-10 group-hover:scale-150 transition-transform duration-500" style={{ color }} />
-    
-    <CardContent className="p-6 relative z-10">
-      <div className="flex items-center justify-between pb-2">
-        <p className="text-sm font-medium text-slate-500">{title}</p>
-        <div className="p-2.5 rounded-xl bg-slate-50 group-hover:bg-white group-hover:shadow-sm transition-all">
-          <Icon className="h-5 w-5" style={{ color }} />
-        </div>
-      </div>
-      <div className="flex items-end justify-between mt-4">
-        <div className="text-3xl font-bold text-slate-800 tracking-tight">{value}</div>
-      </div>
-      {/* Decorative Line */}
-      <div className="absolute bottom-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-current to-transparent opacity-30" style={{ color }} />
-    </CardContent>
-  </Card>
-);
-
 export const Dashboard = () => {
-  const [stats, setStats] = useState<DashboardStats>({
-    counts: { students: 0, teachers: 0, classes: 0 },
-    financials: { revenue: 0, pending: 0, history: [] },
-    activity: [],
-    demographics: []
-  });
-  const [loading, setLoading] = useState(true);
+  const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isError, setIsError] = useState(false);
 
   useEffect(() => {
     const loadData = async () => {
       try {
-        const res = await api.get('/analytics');
-        if (res.data?.success && res.data?.data) {
+        setIsLoading(true);
+        setIsError(false);
+        const res = await api.get('/analytics/stats');
+        if (res.data.success) {
           setStats(res.data.data);
-        } else if (res.data) {
-           // Handle case where data is returned directly or in a different structure
-           setStats(prev => ({ ...prev, ...(res.data || {}) }));
         }
       } catch (err) {
-        console.error("Dashboard Load Failed:", err);
+        console.error("Dashboard Load Failed", err);
+        setIsError(true);
+        toast.error("Failed to load dashboard data. Please try refreshing.");
       } finally {
-        setLoading(false);
+        setIsLoading(false);
       }
     };
+
     loadData();
   }, []);
 
-  const formatMoney = (amount: number) => 
-    new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' }).format(amount || 0);
-
-  if (loading) return (
-    <div className="p-8 space-y-6">
-      <div className="flex justify-between">
-        <Skeleton className="h-10 w-64" />
-        <Skeleton className="h-10 w-32" />
-      </div>
-      <div className="grid gap-4 md:grid-cols-4">
-        {[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-32 rounded-xl" />)}
-      </div>
-      <div className="grid gap-6 md:grid-cols-7">
-        <Skeleton className="md:col-span-4 h-96 rounded-xl" />
-        <Skeleton className="md:col-span-3 h-96 rounded-xl" />
-      </div>
-    </div>
+  // SAFE RENDER: Stat Card Component
+  const StatCard = ({ title, value, icon: Icon, color }: any) => (
+    <Card className="border-l-4" style={{ borderLeftColor: color }}>
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+        <CardTitle className="text-sm font-medium text-muted-foreground">{title}</CardTitle>
+        <Icon className="h-4 w-4 text-muted-foreground" />
+      </CardHeader>
+      <CardContent>
+        {isLoading ? (
+          <Skeleton className="h-8 w-16" />
+        ) : (
+          <div className="text-2xl font-bold" style={{ color }}>{value}</div>
+        )}
+      </CardContent>
+    </Card>
   );
 
+  if (isError) {
+    return (
+      <div className="p-8 text-center text-red-500 bg-red-50 rounded-lg border border-red-100">
+        <h3 className="font-bold">Dashboard Unavailable</h3>
+        <p className="text-sm">We couldn't fetch the latest stats. Check your internet connection or server status.</p>
+      </div>
+    );
+  }
+
   return (
-    <div className="space-y-8 animate-in fade-in duration-500">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b pb-6">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight text-slate-900">Executive Overview</h1>
-          <p className="text-slate-500 mt-1">Real-time school performance metrics & analytics.</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" className="bg-white hover:bg-slate-50">
-            <Calendar className="mr-2 h-4 w-4 text-slate-500" /> 
-            {new Date().toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
-          </Button>
-        </div>
-      </div>
-
-      {/* KEY METRICS */}
+    <div className="space-y-6 animate-in fade-in duration-500">
+      <h1 className="text-3xl font-bold tracking-tight text-slate-900">Dashboard</h1>
+      
+      {/* 1. STATS GRID */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <StatCard title="Total Students" value={stats.counts.students} icon={Users} color="#2563eb" />
-        <StatCard title="Total Teachers" value={stats.counts.teachers} icon={UserCheck} color="#16a34a" />
-        <StatCard title="Active Classes" value={stats.counts.classes} icon={BookOpen} color="#ea580c" />
-        <StatCard title="Total Revenue" value={formatMoney(stats.financials.revenue)} icon={DollarSign} color="#9333ea" />
+        <StatCard 
+          title="Total Students" 
+          value={stats?.counts?.students || 0} 
+          icon={Users} 
+          color="#4F46E5" // Indigo
+        />
+        <StatCard 
+          title="Total Teachers" 
+          value={stats?.counts?.teachers || 0} 
+          icon={Activity} 
+          color="#059669" // Emerald
+        />
+        <StatCard 
+          title="Active Classes" 
+          value={stats?.counts?.classes || 0} 
+          icon={BarChart3} 
+          color="#D97706" // Amber
+        />
+        <StatCard 
+          title="Monthly Revenue" 
+          value={`$${(stats?.counts?.revenue || 0).toLocaleString()}`} 
+          icon={Wallet} 
+          color="#DB2777" // Pink
+        />
       </div>
 
-      <div className="grid gap-6 md:grid-cols-7">
-        {/* CHARTS SECTION */}
-        <div className="md:col-span-4">
-          <DashboardCharts 
-             financials={stats.financials} 
-             demographics={stats.demographics} 
-          />
-        </div>
-
-        {/* ACTIVITY LOG SECTION */}
-        <Card className="md:col-span-3 h-full">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
+        {/* 2. CHARTS AREA */}
+        <Card className="col-span-4">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Activity className="h-5 w-5 text-indigo-600" /> Recent Activity
-            </CardTitle>
+            <CardTitle>Financial Overview</CardTitle>
+          </CardHeader>
+          <CardContent className="pl-2">
+            <DashboardCharts /> 
+          </CardContent>
+        </Card>
+
+        {/* 3. RECENT ACTIVITY */}
+        <Card className="col-span-3">
+          <CardHeader>
+            <CardTitle>Recent Activity</CardTitle>
           </CardHeader>
           <CardContent>
-            {!stats.activity?.length ? (
-              <div className="text-center py-8 text-slate-500">
-                <p>No recent activity logged.</p>
+            {isLoading ? (
+              <div className="space-y-2">
+                {[1, 2, 3].map(i => <Skeleton key={i} className="h-12 w-full" />)}
               </div>
             ) : (
-              <div className="space-y-6">
-                {stats.activity.slice(0, 5).map((item, i) => (
-                  <div key={i} className="flex gap-4 relative">
-                    {/* Activity Timeline Line */}
-                    {i !== stats.activity.length - 1 && (
-                      <div className="absolute left-[11px] top-6 bottom-[-24px] w-0.5 bg-slate-100"></div>
-                    )}
-                    
-                    <div className="relative z-10 h-6 w-6 rounded-full bg-indigo-50 border-2 border-indigo-100 flex items-center justify-center shrink-0">
-                      <div className="h-2 w-2 rounded-full bg-indigo-500"></div>
-                    </div>
-                    
-                    <div className="space-y-1">
-                      <p className="text-sm font-medium text-slate-800 leading-none">{item.action}</p>
+              <div className="space-y-4">
+                {stats?.recentActivities?.length === 0 && <p className="text-sm text-slate-500">No recent activity.</p>}
+                
+                {stats?.recentActivities?.map((log) => (
+                  <div key={log.id} className="flex items-center">
+                    <div className="ml-4 space-y-1">
+                      <p className="text-sm font-medium leading-none text-slate-900">{log.action}</p>
                       <p className="text-xs text-slate-500">
-                        {item.user} • {new Date(item.createdAt).toLocaleDateString()}
+                        {log.user.email} • {new Date(log.createdAt).toLocaleTimeString()}
                       </p>
-                      {item.details && (
-                        <p className="text-xs text-slate-400 italic mt-1">"{item.details}"</p>
-                      )}
                     </div>
                   </div>
                 ))}

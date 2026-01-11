@@ -1,17 +1,20 @@
 // FILE: server/src/routes/analytics.routes.ts
 import { Router } from 'express';
-import * as analyticsController from '../controllers/analytics.controller';
+import { getCharts, getStats } from '../controllers/analytics.controller';
 import { authenticate } from '../middlewares/auth.middleware';
+import { restrictTo } from '../middlewares/role.middleware';
 
 const router = Router();
 
-// Global Protection
 router.use(authenticate);
 
-// Admin Route (Controller checks strict Role)
-router.get('/admin', analyticsController.getAdminDashboard);
+// Everyone needs the basic stats for the dashboard homepage
+router.get('/stats', getStats);
 
-// Teacher Route
-router.get('/teacher', analyticsController.getTeacherDashboard);
+// Only Admins should see the financial charts
+router.get('/charts', 
+  restrictTo('SUPER_ADMIN', 'ADMIN'), 
+  getCharts
+);
 
 export default router;
