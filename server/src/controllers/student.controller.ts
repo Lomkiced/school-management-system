@@ -1,10 +1,12 @@
+// FILE: server/src/controllers/student.controller.ts
 import { Prisma } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import { Request, Response } from 'express';
+import { ZodError } from 'zod';
 import * as studentService from '../services/student.service';
 import prisma from '../utils/prisma';
+import { createStudentSchema, updateStudentSchema } from '../utils/validation';
 
-// ... Keep your existing getStudents, getStudent, createStudent functions ...
 export const getStudents = async (req: Request, res: Response) => {
   try {
     const students = await studentService.getAllStudents();
@@ -26,14 +28,29 @@ export const getStudent = async (req: Request, res: Response) => {
 
 export const createStudent = async (req: Request, res: Response) => {
   try {
-    const student = await studentService.createStudent(req.body);
+    // PROFESSIONAL: Validate Input
+    const validatedData = createStudentSchema.parse(req.body);
+    
+    const student = await studentService.createStudent(validatedData);
     res.status(201).json({ success: true, data: student });
   } catch (error: any) {
+    if (error instanceof ZodError) return res.status(400).json({ success: false, message: error.issues[0].message });
     res.status(400).json({ success: false, message: error.message });
   }
 };
 
-// === THIS IS THE FIXED BULK IMPORT FUNCTION ===
+// === NEW: UPDATE ENDPOINT ===
+export const updateStudent = async (req: Request, res: Response) => {
+  try {
+    const validatedData = updateStudentSchema.parse(req.body);
+    const student = await studentService.updateStudent(req.params.id, validatedData);
+    res.json({ success: true, data: student });
+  } catch (error: any) {
+    if (error instanceof ZodError) return res.status(400).json({ success: false, message: error.issues[0].message });
+    res.status(400).json({ success: false, message: error.message });
+  }
+};
+
 export const createBulkStudents = async (req: Request, res: Response) => {
   try {
     const students = req.body.students;
@@ -61,9 +78,8 @@ export const createBulkStudents = async (req: Request, res: Response) => {
                 firstName: student.firstName,
                 lastName: student.lastName,
                 gender: student.gender || 'MALE',
-                // FIXED: Added missing required fields
                 admissionDate: new Date(),
-                dateOfBirth: new Date('2000-01-01') // Default Birthday
+                dateOfBirth: student.dateOfBirth ? new Date(student.dateOfBirth) : new Date('2000-01-01')
               }
             }
           }

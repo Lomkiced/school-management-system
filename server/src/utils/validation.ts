@@ -59,3 +59,19 @@ export const quizSchema = z.object({
   passingScore: z.number().min(1).max(100),
   questions: z.array(questionSchema).min(1, "A quiz must have at least one question"),
 });
+
+// ================= STUDENT VALIDATION =================
+
+export const createStudentSchema = z.object({
+  email: z.string().email("Invalid email address"),
+  firstName: z.string().min(1, "First name is required"),
+  lastName: z.string().min(1, "Last name is required"),
+  dateOfBirth: z.string().or(z.date()).transform((val) => new Date(val)),
+  gender: z.enum(["MALE", "FEMALE", "OTHER"]),
+  address: z.string().optional(),
+  guardianName: z.string().optional(),
+  guardianPhone: z.string().optional(),
+});
+
+export const updateStudentSchema = createStudentSchema.partial().omit({ email: true });
+// We usually don't allow changing email via this route (that's an Account setting)

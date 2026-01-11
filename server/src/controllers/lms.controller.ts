@@ -2,7 +2,7 @@
 import { Request, Response } from 'express';
 import { ZodError } from 'zod';
 import * as lmsService from '../services/lms.service';
-import prisma from '../utils/prisma'; // <--- Needed for Student Lookup
+import prisma from '../utils/prisma';
 import { assignmentSchema, gradeSchema, quizSchema } from '../utils/validation';
 
 const parseId = (id: string, name: string) => {
@@ -43,8 +43,10 @@ export const submitAssignment = async (req: Request, res: Response) => {
     
     // Fallback: If studentId is missing, try to find it from the User Token
     let finalStudentId = studentId;
+    
+    // FIX 1: Use req.user.id instead of req.user.userId
     if (!finalStudentId && req.user) {
-        const student = await prisma.student.findUnique({ where: { userId: req.user.userId } });
+        const student = await prisma.student.findUnique({ where: { userId: req.user.id } });
         if (student) finalStudentId = student.id;
     }
 
@@ -119,7 +121,13 @@ export const submitQuiz = async (req: Request, res: Response) => {
   try {
     const { answers } = req.body;
     const quizId = req.params.quizId;
-    const userId = req.user?.userId; // Get ID from Token
+    
+    // FIX 2: Use req.user?.id instead of req.user?.userId
+    const userId = req.user?.id; 
+
+    if (!userId) {
+       return res.status(401).json({ success: false, message: "Unauthorized" });
+    }
 
     // 1. Find the Student Profile associated with this User
     const student = await prisma.student.findUnique({

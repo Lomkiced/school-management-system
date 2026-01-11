@@ -1,9 +1,10 @@
+// FILE: client/src/features/students/StudentList.tsx
 import {
   AlertCircle,
   ChevronLeft, ChevronRight,
   CreditCard,
-  Download,
   Filter,
+  Loader2, // Added Loader2
   Plus,
   Search,
   Trash2,
@@ -12,12 +13,13 @@ import {
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { toast } from 'sonner'; // PROFESSIONAL: Use Sonner for notifications
 
 // UI Components
 import { Button } from '../../components/ui/button';
 import { Card, CardContent } from '../../components/ui/card';
 import { Input } from '../../components/ui/input';
-import { Skeleton } from '../../components/ui/skeleton'; //
+import { Skeleton } from '../../components/ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../../components/ui/table';
 
 // API & Modals
@@ -38,7 +40,6 @@ interface Student {
 }
 
 // --- Helper Components ---
-
 const Avatar = ({ name }: { name: string }) => {
   const initials = name
     .split(' ')
@@ -47,6 +48,7 @@ const Avatar = ({ name }: { name: string }) => {
     .substring(0, 2)
     .toUpperCase();
   const colors = ['bg-blue-600', 'bg-violet-600', 'bg-emerald-600', 'bg-amber-600', 'bg-rose-600'];
+  // Stable color based on name length
   const colorIndex = name.length % colors.length;
 
   return (
@@ -56,25 +58,23 @@ const Avatar = ({ name }: { name: string }) => {
   );
 };
 
-const StatusBadge = ({ isActive }: { isActive: boolean }) => {
-  return (
-    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${
-      isActive 
-        ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
-        : 'bg-slate-100 text-slate-600 border-slate-200'
-    }`}>
-      <span className={`w-1.5 h-1.5 rounded-full mr-1.5 ${isActive ? 'bg-emerald-500' : 'bg-slate-400'}`}></span>
-      {isActive ? 'Active' : 'Inactive'}
-    </span>
-  );
-};
+const StatusBadge = ({ isActive }: { isActive: boolean }) => (
+  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${
+    isActive 
+      ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
+      : 'bg-slate-100 text-slate-600 border-slate-200'
+  }`}>
+    <span className={`w-1.5 h-1.5 rounded-full mr-1.5 ${isActive ? 'bg-emerald-500' : 'bg-slate-400'}`}></span>
+    {isActive ? 'Active' : 'Inactive'}
+  </span>
+);
 
 // --- Main Component ---
-
 export const StudentList = () => {
   const navigate = useNavigate();
   const [students, setStudents] = useState<Student[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isDeleting, setIsDeleting] = useState(false); // PROFESSIONAL: Track delete state
   const [showImport, setShowImport] = useState(false);
   
   // -- Advanced State --
@@ -93,6 +93,7 @@ export const StudentList = () => {
       setStudents(data);
     } catch (error) {
       console.error("Failed to fetch students", error);
+      toast.error("Failed to load student list.");
     } finally {
       setIsLoading(false);
     }
@@ -104,43 +105,41 @@ export const StudentList = () => {
 
   // 2. Action Handlers
   const handleDelete = async (ids: string[]) => {
+    // Note: In a real app, use a proper UI Dialog instead of window.confirm
     if (!window.confirm(`Are you sure you want to delete ${ids.length} student(s)? This cannot be undone.`)) return;
 
     try {
-      // Assuming your backend supports bulk delete or single delete loops
-      // If backend only supports single delete: await api.delete(`/students/${ids[0]}`);
-      // For this demo, we'll loop (but ideally you want a bulk endpoint)
+      setIsDeleting(true);
+      
+      // PROFESSIONAL: Use Promise.allSettled or handle failures gracefully
       await Promise.all(ids.map(id => api.delete(`/students/${id}`)));
       
       setStudents(prev => prev.filter(s => !ids.includes(s.id)));
       setSelectedIds(new Set());
-      alert("Students deleted successfully.");
+      
+      toast.success(`${ids.length} student(s) deleted successfully.`);
     } catch (error) {
       console.error("Delete failed", error);
-      alert("Failed to delete students. Please check the console.");
+      toast.error("Failed to delete some students.");
+    } finally {
+      setIsDeleting(false);
     }
   };
 
   const handleBulkEnroll = () => {
-    // Navigate to enroll page with the selected IDs passed in "state"
     navigate('/students/enroll', { state: { selectedStudentIds: Array.from(selectedIds) } });
   };
 
-  // -- Logic: Filter & Search (SAFE VERSION) --
+  // -- Logic: Filter & Search --
   const filteredStudents = useMemo(() => {
     return students.filter((student) => {
-      // SAFEGUARD: Check for null names
       const firstName = student.firstName?.toLowerCase() || "";
       const lastName = student.lastName?.toLowerCase() || "";
       const fullName = `${firstName} ${lastName}`;
-      
-      // SAFEGUARD: Handle missing user relation
       const email = student.user?.email?.toLowerCase() || "";
       const searchLower = searchTerm.toLowerCase();
       
       const matchesSearch = fullName.includes(searchLower) || email.includes(searchLower);
-      
-      // SAFEGUARD: Use Nullish Coalescing (??)
       const isActive = student.user?.isActive ?? false;
 
       const matchesStatus = 
@@ -177,7 +176,7 @@ export const StudentList = () => {
   };
 
   return (
-    <div className="space-y-6 relative font-sans text-slate-900">
+    <div className="space-y-6 relative font-sans text-slate-900 animate-in fade-in duration-500">
       
       {/* HEADER */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -187,13 +186,13 @@ export const StudentList = () => {
         </div>
         
         <div className="flex flex-wrap gap-2 w-full sm:w-auto">
-          <Button variant="outline" onClick={() => setShowImport(true)} className="bg-white border-slate-200">
+          <Button variant="outline" onClick={() => setShowImport(true)} className="bg-white border-slate-200 hover:bg-slate-50">
             <Upload size={16} className="mr-2 text-slate-500" /> Import
           </Button>
-          <Button variant="outline" onClick={() => navigate('/students/enroll')} className="bg-white border-slate-200">
+          <Button variant="outline" onClick={() => navigate('/students/enroll')} className="bg-white border-slate-200 hover:bg-slate-50">
             <Users size={16} className="mr-2 text-slate-500" /> Enroll to Section
           </Button>
-          <Button className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white border-none" onClick={() => navigate('/students/new')}>
+          <Button className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white shadow-md hover:shadow-lg transition-all" onClick={() => navigate('/students/new')}>
             <Plus size={16} /> Add Student
           </Button>
         </div>
@@ -232,10 +231,6 @@ export const StudentList = () => {
                <option value="INACTIVE">Inactive</option>
              </select>
            </div>
-           
-           <Button variant="outline" size="icon" title="Export" className="h-10 w-10 border-slate-200">
-             <Download className="h-4 w-4 text-slate-500" />
-           </Button>
         </div>
       </div>
 
@@ -253,7 +248,7 @@ export const StudentList = () => {
               <Button 
                 size="sm" 
                 variant="outline" 
-                className="h-8 bg-white border-indigo-200 text-indigo-700 hover:bg-indigo-50 hover:text-indigo-800"
+                className="h-8 bg-white border-indigo-200 text-indigo-700 hover:bg-indigo-50"
                 onClick={handleBulkEnroll}
               >
                 Enroll Selected
@@ -261,10 +256,12 @@ export const StudentList = () => {
               <Button 
                 size="sm" 
                 variant="outline" 
-                className="h-8 bg-white border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700 hover:border-red-300"
+                className="h-8 bg-white border-red-200 text-red-600 hover:bg-red-50 hover:border-red-300"
+                disabled={isDeleting}
                 onClick={() => handleDelete(Array.from(selectedIds))}
               >
-                <Trash2 className="h-3.5 w-3.5 mr-1" /> Delete
+                {isDeleting ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : <Trash2 className="h-3.5 w-3.5 mr-1" />}
+                Delete
               </Button>
             </div>
           </div>
@@ -291,19 +288,11 @@ export const StudentList = () => {
             </TableHeader>
             <TableBody>
               {isLoading ? (
-                // SKELETON LOADING STATE
+                // SKELETON LOADING
                 [...Array(5)].map((_, i) => (
                   <TableRow key={i}>
                     <TableCell className="pl-4"><Skeleton className="h-4 w-4" /></TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-3">
-                        <Skeleton className="h-9 w-9 rounded-full" />
-                        <div className="space-y-1">
-                          <Skeleton className="h-4 w-24" />
-                          <Skeleton className="h-3 w-32" />
-                        </div>
-                      </div>
-                    </TableCell>
+                    <TableCell><div className="flex items-center gap-3"><Skeleton className="h-9 w-9 rounded-full" /><div className="space-y-1"><Skeleton className="h-4 w-24" /><Skeleton className="h-3 w-32" /></div></div></TableCell>
                     <TableCell><Skeleton className="h-5 w-16 rounded-full" /></TableCell>
                     <TableCell><Skeleton className="h-4 w-20" /></TableCell>
                     <TableCell><Skeleton className="h-4 w-12" /></TableCell>
@@ -319,12 +308,7 @@ export const StudentList = () => {
                         <AlertCircle className="h-8 w-8 text-slate-400" />
                       </div>
                       <p className="font-medium text-slate-900 text-lg">No students found</p>
-                      <p className="text-sm text-slate-500 mt-1 max-w-xs mx-auto">
-                        We couldn't find any students matching your search. Try adjusting filters or add a new student.
-                      </p>
-                      <Button variant="link" className="mt-2 text-indigo-600" onClick={() => {setSearchTerm(''); setFilterStatus('ALL')}}>
-                        Clear filters
-                      </Button>
+                      <Button variant="link" className="mt-2 text-indigo-600" onClick={() => {setSearchTerm(''); setFilterStatus('ALL')}}>Clear filters</Button>
                     </div>
                   </TableCell>
                 </TableRow>
@@ -352,9 +336,7 @@ export const StudentList = () => {
                         </div>
                       </div>
                     </TableCell>
-                    <TableCell>
-                      <StatusBadge isActive={student.user?.isActive ?? false} />
-                    </TableCell>
+                    <TableCell><StatusBadge isActive={student.user?.isActive ?? false} /></TableCell>
                     <TableCell>
                       {student.enrollments && student.enrollments.length > 0 ? (
                         <div className="flex flex-col">
@@ -365,9 +347,7 @@ export const StudentList = () => {
                          <span className="text-slate-400 italic text-sm">Unenrolled</span>
                       )}
                     </TableCell>
-                    <TableCell>
-                       <span className="capitalize text-slate-600 text-sm">{student.gender?.toLowerCase() || "-"}</span>
-                    </TableCell>
+                    <TableCell><span className="capitalize text-slate-600 text-sm">{student.gender?.toLowerCase() || "-"}</span></TableCell>
                     <TableCell className="text-right pr-6">
                       <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                          <Button 
@@ -402,24 +382,8 @@ export const StudentList = () => {
              Showing <span className="font-medium text-slate-900">{(currentPage - 1) * itemsPerPage + 1}</span> to <span className="font-medium text-slate-900">{Math.min(currentPage * itemsPerPage, filteredStudents.length)}</span> of {filteredStudents.length}
           </p>
           <div className="flex gap-2">
-            <Button 
-              variant="outline" 
-              size="sm" 
-              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-              disabled={currentPage === 1}
-              className="bg-white border-slate-300 h-8 px-3"
-            >
-              <ChevronLeft className="h-4 w-4" />
-            </Button>
-            <Button 
-              variant="outline" 
-              size="sm" 
-              onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-              disabled={currentPage === totalPages || totalPages === 0}
-              className="bg-white border-slate-300 h-8 px-3"
-            >
-              <ChevronRight className="h-4 w-4" />
-            </Button>
+            <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} className="bg-white border-slate-300 h-8 px-3"><ChevronLeft className="h-4 w-4" /></Button>
+            <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages || totalPages === 0} className="bg-white border-slate-300 h-8 px-3"><ChevronRight className="h-4 w-4" /></Button>
           </div>
         </div>
       </Card>

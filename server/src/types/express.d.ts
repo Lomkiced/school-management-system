@@ -1,18 +1,20 @@
 // FILE: server/src/types/express.d.ts
+import { UserRole } from '@prisma/client'; // Assuming you have Prisma generated types
 
-import { UserRole } from '@prisma/client';
+// Define what payload your JWT holds
+export interface JwtPayload {
+  id: string;
+  email: string;
+  role: UserRole;
+  firstName: string;
+  lastName: string;
+}
 
 declare global {
   namespace Express {
     interface Request {
-      user?: {
-        userId: string;
-        role: UserRole;
-        iat?: number;
-        exp?: number;
-      };
+      // Now req.user is strictly typed!
+      user?: JwtPayload;
     }
   }
 }
-
-export { };

@@ -1,6 +1,7 @@
+// FILE: client/src/lib/axios.ts
 import axios from 'axios';
+import { useAuthStore } from '../store/authStore'; // Import the store directly
 
-// 1. Create the Instance
 const api = axios.create({
   baseURL: 'http://localhost:5000/api',
   headers: {
@@ -8,26 +9,15 @@ const api = axios.create({
   },
 });
 
-// 2. The "Request Interceptor" (Outgoing)
-// This runs BEFORE every request leaves your browser
+// REQUEST INTERCEPTOR
 api.interceptors.request.use(
   (config) => {
-    // A. Try to find the token in the "school-auth-storage" (Zustand's default name)
-    const storageData = localStorage.getItem('school-auth-storage');
-    
-    if (storageData) {
-      try {
-        // Zustand stores data as: { state: { token: "...", user: ... }, version: 0 }
-        const parsed = JSON.parse(storageData);
-        const token = parsed.state?.token;
+    // PROFESSIONAL: Access the store state directly outside of a component
+    // This removes the need for manual localStorage parsing
+    const token = useAuthStore.getState().token;
 
-        if (token) {
-          // B. Attach it to the Authorization Header
-          config.headers.Authorization = `Bearer ${token}`;
-        }
-      } catch (error) {
-        console.error("Failed to parse auth token:", error);
-      }
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
     }
     
     return config;
@@ -35,20 +25,21 @@ api.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
-// 3. The "Response Interceptor" (Incoming)
-// This catches 401 errors globally so you don't have to handle them in every component
+// RESPONSE INTERCEPTOR
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    // If the token is expired or invalid (401)
-    if (error.response?.status === 401) {
-      console.warn("⚠️ Session expired or unauthorized. Logging out...");
+    const originalRequest = error.config;
+
+    // Check for 401 (Unauthorized)
+    if (error.response?.status === 401 && !originalRequest._retry) {
+      console.warn("⚠️ Session expired. Redirecting to login...");
       
-      // Optional: Clear storage to prevent infinite loops
-      // localStorage.removeItem('school-auth-storage');
+      // PROFESSIONAL: Use the store's logout action to clean up state
+      useAuthStore.getState().logout();
       
-      // Force redirect to login if not already there
-      if (!window.location.pathname.includes('/login')) {
+      // Only redirect if not already on public pages
+      if (!window.location.pathname.startsWith('/login')) {
         window.location.href = '/login';
       }
     }
