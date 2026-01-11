@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 
+// DEFINING THE ADMIN MENU STRUCTURE
 const adminItems = [
   { 
     icon: LayoutDashboard, 
@@ -22,7 +23,7 @@ const adminItems = [
   { 
     icon: GraduationCap, 
     label: 'Students', 
-    href: '/dashboard/students' // Note: You might need to adjust routes later
+    href: '/dashboard/students' 
   },
   { 
     icon: Users, 
@@ -74,19 +75,21 @@ export default function Sidebar() {
       <nav className="flex-1 space-y-1 p-4">
         {adminItems.map((item) => {
           const Icon = item.icon;
-          // Check if current path starts with the item href (for active state)
+          
+          // Logic: "Is this the active page?"
+          // We check if the current URL starts with the menu item's href
           const isActive = location.pathname === item.href || 
                           (item.href !== '/dashboard' && location.pathname.startsWith(item.href));
           
           return (
             <Link
               key={item.href}
-              to={item.href} // <--- THE CRITICAL FIX: Uses React Router
+              to={item.href} // <--- THE CRITICAL FIX: Uses React Router's Link
               className={cn(
                 "flex items-center gap-3 rounded-lg px-4 py-3 text-sm font-medium transition-all duration-200",
                 isActive 
-                  ? "bg-blue-600 text-white shadow-lg shadow-blue-900/20 translate-x-1" 
-                  : "text-slate-400 hover:bg-slate-800 hover:text-white hover:translate-x-1"
+                  ? "bg-blue-600 text-white shadow-lg shadow-blue-900/20 translate-x-1" // Active Style
+                  : "text-slate-400 hover:bg-slate-800 hover:text-white hover:translate-x-1" // Inactive Style
               )}
             >
               <Icon className={cn("h-5 w-5", isActive ? "text-white" : "text-slate-400")} />
