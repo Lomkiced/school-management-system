@@ -1,95 +1,123 @@
+import { zodResolver } from '@hookform/resolvers/zod';
+import { Loader2 } from 'lucide-react';
 import { useState } from 'react';
+import { useForm } from 'react-hook-form';
 import { useNavigate } from 'react-router-dom';
-import { Button } from '../../components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
-import { Input } from '../../components/ui/input';
-import api from '../../lib/axios';
-import { useAuthStore } from '../../store/authStore';
+import { toast } from 'sonner';
+import { z } from 'zod';
 
-export const LoginForm = () => {
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import api from '@/lib/axios';
+import { useAuthStore } from '@/store/authStore';
+
+const loginSchema = z.object({
+  email: z.string().email('Please enter a valid email'),
+  password: z.string().min(1, 'Password is required'),
+});
+
+type LoginFormData = z.infer<typeof loginSchema>;
+
+export default function LoginForm() {
   const navigate = useNavigate();
   const login = useAuthStore((state) => state.login);
-
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const form = useForm<LoginFormData>({
+    resolver: zodResolver(loginSchema),
+    defaultValues: {
+      email: '',
+      password: '',
+    },
+  });
+
+  const onSubmit = async (data: LoginFormData) => {
     setIsLoading(true);
-    setError('');
-
     try {
-      // 1. Call the Backend API
-      const response = await api.post('/auth/login', { email, password });
+      // 1. Call the API
+      const response = await api.post('/auth/login', data);
+      const { user, token } = response.data;
 
-      // 2. If successful, update global state
-      const { user, token } = response.data.data;
+      // 2. Save to Store
       login(user, token);
+      toast.success(`Welcome back, ${user.firstName}!`);
 
-      // 3. Redirect based on User Role (The "Traffic Cop" Logic)
-      if (user.role === 'ADMIN') {
-        navigate('/dashboard');
-      } else if (user.role === 'STUDENT') {
-        navigate('/student/dashboard');
-      } else if (user.role === 'TEACHER') {
-        // We haven't built this specific page yet, but this prepares for it
-        navigate('/teacher/dashboard'); 
-      } else {
-        // Fallback for any other role
-        navigate('/dashboard');
+      // 3. INTELLIGENT ROUTING (The Professional Part)
+      switch (user.role) {
+        case 'SUPER_ADMIN':
+        case 'ADMIN':
+          navigate('/dashboard');
+          break;
+        case 'TEACHER':
+          navigate('/teacher/dashboard');
+          break;
+        case 'STUDENT':
+          navigate('/student/dashboard');
+          break;
+        case 'PARENT':
+          navigate('/parent/dashboard'); // <--- NEW ROUTE
+          break;
+        default:
+          navigate('/');
       }
-
-    } catch (err: any) {
-      setError(err.response?.data?.message || 'Login failed');
+    } catch (error: any) {
+      console.error(error);
+      toast.error(error.response?.data?.message || 'Invalid credentials');
     } finally {
       setIsLoading(false);
     }
   };
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-slate-50">
-      <Card className="w-[400px]">
-        <CardHeader>
-          <CardTitle className="text-center">School Management System</CardTitle>
+    <div className="flex min-h-screen items-center justify-center bg-slate-100 p-4">
+      <Card className="w-full max-w-md shadow-2xl">
+        <CardHeader className="space-y-1 text-center">
+          <CardTitle className="text-2xl font-bold text-slate-900">School Portal</CardTitle>
+          <CardDescription>Enter your credentials to access your account</CardDescription>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            {error && (
-              <div className="p-3 text-sm text-red-500 bg-red-50 rounded-md">
-                {error}
-              </div>
-            )}
-
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
             <div className="space-y-2">
-              <label className="text-sm font-medium">Email</label>
-              <Input 
-                type="email" 
-                placeholder="admin@school.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
+              <Input
+                type="email"
+                placeholder="name@school.com"
+                {...form.register('email')}
+                disabled={isLoading}
               />
+              {form.formState.errors.email && (
+                <p className="text-xs text-red-500">{form.formState.errors.email.message}</p>
+              )}
             </div>
-
             <div className="space-y-2">
-              <label className="text-sm font-medium">Password</label>
-              <Input 
-                type="password" 
+              <Input
+                type="password"
                 placeholder="••••••••"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
+                {...form.register('password')}
+                disabled={isLoading}
               />
+              {form.formState.errors.password && (
+                <p className="text-xs text-red-500">{form.formState.errors.password.message}</p>
+              )}
             </div>
-
-            <Button type="submit" className="w-full" disabled={isLoading}>
-              {isLoading ? 'Signing in...' : 'Sign In'}
+            <Button type="submit" className="w-full bg-slate-900 hover:bg-slate-800" disabled={isLoading}>
+              {isLoading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Signing in...
+                </>
+              ) : (
+                'Sign In'
+              )}
             </Button>
+            
+            {/* Quick Helper for Demo Purposes */}
+            <div className="mt-4 text-center text-xs text-gray-400">
+               Demo: parent@school.com / password123
+            </div>
           </form>
         </CardContent>
       </Card>
     </div>
   );
-};
+}

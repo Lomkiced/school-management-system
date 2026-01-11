@@ -16,7 +16,7 @@ enum UserRole {
   ADMIN
   TEACHER
   STUDENT
-  PARENT
+  PARENT       // <--- NEW: Added Parent Role
 }
 
 enum Gender {
@@ -45,11 +45,19 @@ enum QuestionType {
   IDENTIFICATION
 }
 
-// === NEW: CHAT ENUMS ===
 enum ConversationType {
   DIRECT
   CLASS_GROUP
   ANNOUNCEMENT
+}
+
+// === NEW: HR ENUMS ===
+enum EmploymentStatus {
+  FULL_TIME
+  PART_TIME
+  CONTRACT
+  ON_LEAVE
+  TERMINATED
 }
 
 // ================= CORE IDENTITY =================
@@ -62,9 +70,12 @@ model User {
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
 
+  // === LINKED PROFILES ===
   studentProfile Student?
   teacherProfile Teacher?
   adminProfile   Admin?
+  parentProfile  Parent?   // <--- NEW: Link to Parent Entity
+
   auditLogs      AuditLog[]
   
   // === CHAT RELATIONS ===
@@ -80,15 +91,51 @@ model Admin {
   user      User   @relation(fields: [userId], references: [id])
 }
 
+// ================= HR & FACULTY MANAGEMENT (NEW) =================
+
+model Department {
+  id          Int       @id @default(autoincrement())
+  name        String    @unique // e.g., "Science", "Mathematics", "IT"
+  description String?
+  headId      String?   @unique // Link to a Teacher (Head of Dept)
+  teachers    Teacher[] 
+  createdAt   DateTime  @default(now())
+}
+
 model Teacher {
-  id        String @id @default(uuid())
+  id               String           @id @default(uuid())
+  firstName        String
+  lastName         String
+  phone            String?
+  address          String?
+  
+  // === PROFESSIONAL DETAILS (NEW) ===
+  specialization   String?          // e.g., "Physics", "React Development"
+  joiningDate      DateTime         @default(now())
+  status           EmploymentStatus @default(FULL_TIME)
+  
+  // === RELATIONS ===
+  departmentId     Int?
+  department       Department?      @relation(fields: [departmentId], references: [id])
+  
+  userId           String           @unique
+  user             User             @relation(fields: [userId], references: [id])
+  classes          Class[]
+}
+
+// ================= STUDENT & FAMILY (REFACTORED) =================
+
+model Parent {
+  id        String    @id @default(uuid())
   firstName String
   lastName  String
-  phone     String?
+  phone     String    @unique // Essential for SMS notifications
   address   String?
-  userId    String @unique
-  user      User   @relation(fields: [userId], references: [id])
-  classes   Class[]
+  
+  userId    String    @unique
+  user      User      @relation(fields: [userId], references: [id])
+  
+  students  Student[] // One Parent has Many Students
 }
 
 model Student {
@@ -98,13 +145,21 @@ model Student {
   dateOfBirth   DateTime
   gender        Gender
   address       String?
+  
+  // Legacy fields (kept for safety, but Parent Model is preferred now)
   guardianName  String?
   guardianPhone String?
+
+  // === PARENT RELATION (NEW) ===
+  parentId      String?
+  parent        Parent?  @relation(fields: [parentId], references: [id])
+
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
   admissionDate DateTime @default(now())
   userId        String   @unique
   user          User     @relation(fields: [userId], references: [id])
+  
   enrollments   Enrollment[]
   attendances   Attendance[]
   grades        Grade[]
@@ -181,8 +236,7 @@ model Class {
   quizzes     Quiz[]
   
   // === CHAT RELATION ===
-  // A class has ONE main group chat
-  conversation Conversation? 
+  conversation Conversation?
 }
 
 model Enrollment {
@@ -343,7 +397,7 @@ model QuestionOption {
 
 model QuizAttempt {
   id          String    @id @default(uuid())
-  score       Float?    
+  score       Float?
   startedAt   DateTime  @default(now())
   finishedAt  DateTime?
   studentId   String
@@ -355,7 +409,7 @@ model QuizAttempt {
 
 model QuizAnswer {
   id               String   @id @default(uuid())
-  textAnswer       String?  
+  textAnswer       String?
   selectedOptionId String?  
   attemptId        String
   attempt          QuizAttempt @relation(fields: [attemptId], references: [id])
@@ -364,7 +418,7 @@ model QuizAnswer {
   @@unique([attemptId, questionId])
 }
 
-// ================= MODULE B: CHAT SYSTEM =================
+// ================= CHAT SYSTEM =================
 
 model Conversation {
   id          String           @id @default(uuid())

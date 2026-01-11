@@ -1,115 +1,98 @@
-// FILE: client/src/App.tsx
-import { Suspense, lazy, useEffect } from 'react';
 import { Navigate, Route, BrowserRouter as Router, Routes } from 'react-router-dom';
 import { Toaster } from 'sonner';
-import { ErrorBoundary } from './components/ui/ErrorBoundary';
+
+// Features - Auth
+import LoginForm from './features/auth/LoginForm';
+
+// Features - Dashboards
+import Dashboard from './features/dashboard/Dashboard'; // Admin
+import ParentDashboard from './features/parent/ParentDashboard'; // <--- NEW
+import StudentDashboard from './features/students/StudentDashboard';
+import TeacherDashboard from './features/teachers/TeacherDashboard';
+
+// Layouts
+import DashboardLayout from './components/layout/DashboardLayout'; // Admin Layout
+import ParentLayout from './components/layout/ParentLayout'; // <--- NEW
+import StudentLayout from './components/layout/StudentLayout';
+import TeacherLayout from './components/layout/TeacherLayout';
+
+// Guards (Assuming you might have a generic ProtectedRoute wrapper, 
+// if not, we use this simple inline check or your existing one)
 import { useAuthStore } from './store/authStore';
 
-// === 1. LAZY LOAD COMPONENTS ===
-const DashboardLayout = lazy(() => import('./components/layout/DashboardLayout').then(m => ({ default: m.DashboardLayout })));
-const StudentLayout = lazy(() => import('./components/layout/StudentLayout').then(m => ({ default: m.StudentLayout })));
-const TeacherLayout = lazy(() => import('./components/layout/TeacherLayout').then(m => ({ default: m.TeacherLayout })));
+function ProtectedRoute({ children, allowedRoles }: { children: React.ReactNode, allowedRoles: string[] }) {
+  const { user, isAuthenticated } = useAuthStore();
+  
+  if (!isAuthenticated || !user) {
+    return <Navigate to="/login" replace />;
+  }
 
-// Auth
-const LoginForm = lazy(() => import('./features/auth/LoginForm').then(m => ({ default: m.LoginForm })));
+  if (!allowedRoles.includes(user.role)) {
+    return <Navigate to="/unauthorized" replace />;
+  }
 
-// Dashboard
-const Dashboard = lazy(() => import('./features/dashboard/Dashboard').then(m => ({ default: m.Dashboard })));
+  return <>{children}</>;
+}
 
-// Students
-const StudentList = lazy(() => import('./features/students/StudentList').then(m => ({ default: m.StudentList })));
-const AddStudent = lazy(() => import('./features/students/AddStudent').then(m => ({ default: m.AddStudent })));
-const EnrollStudent = lazy(() => import('./features/students/EnrollStudent').then(m => ({ default: m.EnrollStudent })));
-const StudentGrades = lazy(() => import('./features/students/StudentGrades').then(m => ({ default: m.StudentGrades })));
-
-// Teachers
-const TeacherList = lazy(() => import('./features/teachers/TeacherList').then(m => ({ default: m.TeacherList })));
-const AddTeacher = lazy(() => import('./features/teachers/AddTeacher').then(m => ({ default: m.AddTeacher })));
-const TeacherDashboard = lazy(() => import('./features/teachers/TeacherDashboard').then(m => ({ default: m.TeacherDashboard })));
-
-// Classes
-const ClassList = lazy(() => import('./features/classes/ClassList').then(m => ({ default: m.ClassList })));
-const AddClass = lazy(() => import('./features/classes/AddClass').then(m => ({ default: m.AddClass })));
-const Gradebook = lazy(() => import('./features/classes/Gradebook').then(m => ({ default: m.Gradebook })));
-
-// Finance
-const FeeList = lazy(() => import('./features/finance/FeeList').then(m => ({ default: m.FeeList })));
-const StudentLedger = lazy(() => import('./features/finance/StudentLedger').then(m => ({ default: m.StudentLedger })));
-
-// Settings
-const Settings = lazy(() => import('./features/settings/Settings').then(m => ({ default: m.Settings })));
-
-// LMS (Quiz)
-const QuizPlayer = lazy(() => import('./features/lms/QuizPlayer').then(m => ({ default: m.QuizPlayer })));
-const QuizBuilder = lazy(() => import('./features/lms/QuizBuilder').then(m => ({ default: m.QuizBuilder })));
-
-// === 2. LOADING SPINNER ===
-const LoadingScreen = () => (
-  <div className="h-screen w-full flex flex-col items-center justify-center bg-slate-50 gap-4">
-    <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-indigo-600"></div>
-    <p className="text-sm text-slate-500">Loading Module...</p>
-  </div>
-);
-
-function App() {
-  const initialize = useAuthStore((state) => state.initialize);
-
-  useEffect(() => {
-    // Attempt to restore session
-    initialize();
-  }, [initialize]);
-
+export default function App() {
   return (
     <Router>
-      <ErrorBoundary>
-        <Toaster position="top-right" richColors closeButton />
-        
-        <Suspense fallback={<LoadingScreen />}>
-          <Routes>
-            {/* Public */}
-            <Route path="/login" element={<LoginForm />} />
+      <Toaster position="top-right" />
+      <Routes>
+        {/* PUBLIC ROUTES */}
+        <Route path="/login" element={<LoginForm />} />
+        <Route path="/" element={<Navigate to="/login" replace />} />
 
-            {/* === CRITICAL FIX: QUIZ MODE IS NOW STANDALONE === */}
-            {/* This ensures it works for both Students and Teachers without sidebar distractions */}
-            <Route path="/quiz/:quizId" element={<QuizPlayer />} />
+        {/* ADMIN ROUTES */}
+        <Route 
+          element={
+            <ProtectedRoute allowedRoles={['SUPER_ADMIN', 'ADMIN']}>
+              <DashboardLayout />
+            </ProtectedRoute>
+          }
+        >
+          <Route path="/dashboard" element={<Dashboard />} />
+          {/* Add other admin routes here */}
+        </Route>
 
-            {/* Admin / Staff Portal */}
-            <Route element={<DashboardLayout />}>
-              <Route path="/dashboard" element={<Dashboard />} />
-              <Route path="/students" element={<StudentList />} />
-              <Route path="/students/new" element={<AddStudent />} />
-              <Route path="/students/enroll" element={<EnrollStudent />} />
-              <Route path="/teachers" element={<TeacherList />} />
-              <Route path="/teachers/new" element={<AddTeacher />} />
-              <Route path="/classes" element={<ClassList />} />
-              <Route path="/classes/new" element={<AddClass />} />
-              <Route path="/classes/:classId/grading" element={<Gradebook />} />
-              <Route path="/finance" element={<FeeList />} />
-              <Route path="/students/:studentId/ledger" element={<StudentLedger />} />
-              <Route path="/settings" element={<Settings />} />
-            </Route>
+        {/* TEACHER ROUTES */}
+        <Route 
+          element={
+            <ProtectedRoute allowedRoles={['TEACHER']}>
+              <TeacherLayout />
+            </ProtectedRoute>
+          }
+        >
+          <Route path="/teacher/dashboard" element={<TeacherDashboard />} />
+        </Route>
 
-            {/* Student Portal */}
-            <Route path="/student" element={<StudentLayout />}>
-              <Route path="dashboard" element={<div className="p-8 text-2xl font-bold">Student Dashboard</div>} />
-              <Route path="grades" element={<StudentGrades />} />
-              {/* QUIZ ROUTE REMOVED FROM HERE */}
-            </Route>
+        {/* STUDENT ROUTES */}
+        <Route 
+          element={
+            <ProtectedRoute allowedRoles={['STUDENT']}>
+              <StudentLayout />
+            </ProtectedRoute>
+          }
+        >
+          <Route path="/student/dashboard" element={<StudentDashboard />} />
+        </Route>
 
-            {/* Teacher Portal */}
-            <Route path="/teacher" element={<TeacherLayout />}>
-              <Route path="dashboard" element={<TeacherDashboard />} />
-              <Route path="grading/:classId" element={<Gradebook />} />
-              <Route path="class/:classId/quiz/new" element={<QuizBuilder />} />
-            </Route>
+        {/* === PARENT ROUTES (NEW) === */}
+        <Route 
+          element={
+            <ProtectedRoute allowedRoles={['PARENT']}>
+              <ParentLayout />
+            </ProtectedRoute>
+          }
+        >
+          <Route path="/parent/dashboard" element={<ParentDashboard />} />
+          <Route path="/parent/children" element={<div>Children List (Coming Soon)</div>} />
+          <Route path="/parent/fees" element={<div>Fee Status (Coming Soon)</div>} />
+        </Route>
 
-            {/* Default */}
-            <Route path="/" element={<Navigate to="/login" replace />} />
-          </Routes>
-        </Suspense>
-      </ErrorBoundary>
+        {/* CATCH ALL */}
+        <Route path="*" element={<Navigate to="/login" replace />} />
+      </Routes>
     </Router>
   );
 }
-
-export default App;
