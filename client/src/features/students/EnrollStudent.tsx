@@ -3,11 +3,12 @@ import {
   ArrowLeft,
   Check,
   ChevronsUpDown,
+  Filter,
   Loader2,
   Search,
   Users
 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 
@@ -15,20 +16,27 @@ import { Button } from '../../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Input } from '../../components/ui/input';
 import api from '../../lib/axios';
+import { cn } from '../../lib/utils';
 
-// --- Types ---
+// --- Enhanced Types ---
 interface StudentOption {
   id: string;
   firstName: string;
   lastName: string;
   user: { email: string };
+  // New Field: History of enrollments
+  enrollments: {
+    section: {
+      academicYearId: number;
+    }
+  }[];
 }
 
 interface SectionOption {
   id: number;
   name: string;
   gradeLevel: { name: string };
-  academicYear: { name: string };
+  academicYear: { id: number; name: string }; // Added ID
 }
 
 export const EnrollStudent = () => {
@@ -51,12 +59,13 @@ export const EnrollStudent = () => {
   useEffect(() => {
     const init = async () => {
       try {
-        const res = await api.get('/enrollments/options');
+        const res = await api.get('/enrollment/options');
         if (res.data.success) {
           setStudents(res.data.data.students);
           setSections(res.data.data.sections);
         }
       } catch (err) {
+        console.error(err);
         toast.error("Failed to load enrollment data.");
       } finally {
         setIsLoading(false);
@@ -65,7 +74,28 @@ export const EnrollStudent = () => {
     init();
   }, []);
 
-  // 2. Selection Handlers
+  // 2. SMART FILTERING LOGIC
+  const availableStudents = useMemo(() => {
+    // If no section is selected, show everyone (or no one, depending on preference)
+    if (!selectedSectionId) return students;
+
+    // A. Find the Academic Year of the selected section
+    const activeSection = sections.find(s => s.id.toString() === selectedSectionId);
+    if (!activeSection) return students;
+
+    const targetYearId = activeSection.academicYear.id;
+
+    // B. Filter out students who already have a class in this Year
+    return students.filter(student => {
+      const alreadyHasClassInThisYear = student.enrollments.some(
+        enrollment => enrollment.section.academicYearId === targetYearId
+      );
+      // We keep the student ONLY if they DON'T have a class in this year
+      return !alreadyHasClassInThisYear;
+    });
+  }, [students, sections, selectedSectionId]);
+
+  // 3. Selection Handlers
   const toggleStudent = (id: string) => {
     const newSet = new Set(selectedStudentIds);
     if (newSet.has(id)) newSet.delete(id);
@@ -74,8 +104,7 @@ export const EnrollStudent = () => {
   };
 
   const toggleAllFiltered = () => {
-    // Only toggle the students currently visible in the search
-    const visibleIds = filteredStudents.map(s => s.id);
+    const visibleIds = filteredAndSearchedStudents.map(s => s.id);
     const allSelected = visibleIds.every(id => selectedStudentIds.has(id));
     
     const newSet = new Set(selectedStudentIds);
@@ -87,7 +116,7 @@ export const EnrollStudent = () => {
     setSelectedStudentIds(newSet);
   };
 
-  // 3. Submit Handler
+  // 4. Submit Handler
   const handleSubmit = async () => {
     if (!selectedSectionId) return toast.error("Please select a section first.");
     if (selectedStudentIds.size === 0) return toast.error("Please select at least one student.");
@@ -99,11 +128,26 @@ export const EnrollStudent = () => {
         studentIds: Array.from(selectedStudentIds)
       };
 
-      const res = await api.post('/enrollments/bulk', payload);
+      const res = await api.post('/enrollment/bulk', payload);
       
       if (res.data.success) {
         toast.success(res.data.data.message);
-        setSelectedStudentIds(new Set()); // Clear selection after success
+        
+        // OPTIONAL: Manually update local state to hide newly enrolled students immediately
+        // This makes the UI feel instant without refetching
+        const enrolledSet = new Set(selectedStudentIds);
+        setStudents(prev => prev.map(s => {
+           if (enrolledSet.has(s.id)) {
+             // Mock update their enrollment history so they vanish from the list
+             return {
+               ...s,
+               enrollments: [...s.enrollments, { section: { academicYearId: sections.find(sec => sec.id.toString() === selectedSectionId)!.academicYear.id } }]
+             };
+           }
+           return s;
+        }));
+
+        setSelectedStudentIds(new Set());
       }
     } catch (err: any) {
       toast.error(err.response?.data?.message || "Enrollment failed.");
@@ -112,14 +156,11 @@ export const EnrollStudent = () => {
     }
   };
 
-  // 4. Filtering Logic
-  const filteredStudents = students.filter(s => {
+  // 5. Apply Search on top of the Smart Filter
+  const filteredAndSearchedStudents = availableStudents.filter(s => {
     const search = studentSearch.toLowerCase();
-    return (
-      s.firstName.toLowerCase().includes(search) || 
-      s.lastName.toLowerCase().includes(search) ||
-      s.user.email.toLowerCase().includes(search)
-    );
+    const fullName = `${s.firstName} ${s.lastName}`.toLowerCase();
+    return fullName.includes(search) || s.user.email.toLowerCase().includes(search);
   });
 
   return (
@@ -133,7 +174,7 @@ export const EnrollStudent = () => {
           </Button>
           <div>
             <h1 className="text-2xl font-bold text-slate-900">Enrollment Manager</h1>
-            <p className="text-slate-500 text-sm">Select a section and assign multiple students.</p>
+            <p className="text-slate-500 text-sm">Select a section to see eligible students.</p>
           </div>
         </div>
         <Button 
@@ -147,7 +188,6 @@ export const EnrollStudent = () => {
         </Button>
       </div>
 
-      {/* MAIN CONTENT GRID */}
       <div className="grid grid-cols-1 md:grid-cols-12 gap-6 h-full min-h-0">
         
         {/* LEFT: SECTION SELECTOR */}
@@ -168,14 +208,18 @@ export const EnrollStudent = () => {
                 <button
                   key={section.id}
                   onClick={() => setSelectedSectionId(section.id.toString())}
-                  className={`w-full text-left px-3 py-3 rounded-md text-sm transition-all border ${
+                  className={cn(
+                    "w-full text-left px-3 py-3 rounded-md text-sm transition-all border group",
                     selectedSectionId === section.id.toString()
                       ? "bg-indigo-50 border-indigo-200 ring-1 ring-indigo-300 shadow-sm"
                       : "bg-white border-transparent hover:bg-slate-50 hover:border-slate-200"
-                  }`}
+                  )}
                 >
-                  <div className={`font-semibold ${selectedSectionId === section.id.toString() ? 'text-indigo-900' : 'text-slate-900'}`}>
-                    {section.gradeLevel?.name || 'Grade ?'} - {section.name}
+                  <div className={cn(
+                    "font-semibold group-hover:text-indigo-700 transition-colors",
+                    selectedSectionId === section.id.toString() ? 'text-indigo-900' : 'text-slate-900'
+                  )}>
+                    {section.gradeLevel?.name} - {section.name}
                   </div>
                   <div className="text-xs text-slate-500 mt-0.5 font-medium">
                     {section.academicYear?.name}
@@ -194,8 +238,16 @@ export const EnrollStudent = () => {
                   <ChevronsUpDown className="h-4 w-4 text-indigo-600" />
                   2. Select Students
                 </CardTitle>
-                <div className="bg-white px-3 py-1 rounded-full border border-slate-200 text-xs font-semibold text-slate-600 shadow-sm">
-                  {selectedStudentIds.size} selected
+                <div className="flex items-center gap-3">
+                  {/* Status Indicator */}
+                  <div className="text-xs text-slate-500 font-medium hidden sm:block">
+                    {selectedSectionId 
+                      ? `${filteredAndSearchedStudents.length} Eligible` 
+                      : "Select a section first"}
+                  </div>
+                  <div className="bg-white px-3 py-1 rounded-full border border-slate-200 text-xs font-semibold text-slate-600 shadow-sm">
+                    {selectedStudentIds.size} selected
+                  </div>
                 </div>
              </div>
              
@@ -203,55 +255,68 @@ export const EnrollStudent = () => {
              <div className="relative pb-3">
                <Search className="absolute left-3 top-1/2 -translate-y-[calc(50%+6px)] h-4 w-4 text-slate-400" />
                <Input 
-                 placeholder="Search student by name or email..." 
+                 placeholder="Search eligible students..." 
                  className="pl-9 bg-white border-slate-200 focus-visible:ring-indigo-500"
                  value={studentSearch}
                  onChange={(e) => setStudentSearch(e.target.value)}
+                 disabled={!selectedSectionId}
                />
              </div>
           </CardHeader>
           
           <CardContent className="flex-1 overflow-y-auto p-0 relative">
-            {/* Select All Bar */}
-            <div className="sticky top-0 bg-white/95 backdrop-blur border-b z-10 px-4 py-2.5 flex items-center gap-3">
-               <input 
-                  type="checkbox" 
-                  className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 h-4 w-4 cursor-pointer"
-                  checked={filteredStudents.length > 0 && filteredStudents.every(s => selectedStudentIds.has(s.id))}
-                  onChange={toggleAllFiltered}
-               />
-               <span className="text-xs font-bold text-slate-500 uppercase tracking-wide">Select All ({filteredStudents.length})</span>
-            </div>
-
-            <div className="divide-y divide-slate-100">
-              {filteredStudents.length === 0 ? (
-                <div className="p-12 text-center flex flex-col items-center gap-2">
-                  <Search className="h-8 w-8 text-slate-300" />
-                  <p className="text-slate-500 text-sm">No students found matching "{studentSearch}"</p>
-                </div>
-              ) : (
-                filteredStudents.map(student => (
-                  <div 
-                    key={student.id} 
-                    className={`flex items-center gap-3 px-4 py-3 hover:bg-slate-50 transition-colors cursor-pointer ${
-                      selectedStudentIds.has(student.id) ? "bg-indigo-50/40" : ""
-                    }`}
-                    onClick={() => toggleStudent(student.id)}
-                  >
-                    <input 
+            {!selectedSectionId ? (
+              <div className="h-full flex flex-col items-center justify-center text-slate-400 p-8">
+                <Filter className="h-12 w-12 mb-4 opacity-20" />
+                <p>Please select a section on the left</p>
+                <p className="text-xs mt-1">We will show you students available for that academic year.</p>
+              </div>
+            ) : (
+              <>
+                <div className="sticky top-0 bg-white/95 backdrop-blur border-b z-10 px-4 py-2.5 flex items-center gap-3">
+                   <input 
                       type="checkbox" 
-                      className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 h-4 w-4 pointer-events-none"
-                      checked={selectedStudentIds.has(student.id)}
-                      readOnly
-                    />
-                    <div>
-                      <div className="text-sm font-medium text-slate-900">{student.lastName}, {student.firstName}</div>
-                      <div className="text-xs text-slate-500">{student.user.email}</div>
+                      className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 h-4 w-4 cursor-pointer"
+                      checked={filteredAndSearchedStudents.length > 0 && filteredAndSearchedStudents.every(s => selectedStudentIds.has(s.id))}
+                      onChange={toggleAllFiltered}
+                   />
+                   <span className="text-xs font-bold text-slate-500 uppercase tracking-wide">Select All ({filteredAndSearchedStudents.length})</span>
+                </div>
+
+                <div className="divide-y divide-slate-100">
+                  {filteredAndSearchedStudents.length === 0 ? (
+                    <div className="p-12 text-center flex flex-col items-center gap-2">
+                      <Users className="h-8 w-8 text-slate-300" />
+                      <p className="text-slate-500 text-sm">
+                        {studentSearch ? "No matching students found." : "All active students are already enrolled for this year!"}
+                      </p>
                     </div>
-                  </div>
-                ))
-              )}
-            </div>
+                  ) : (
+                    filteredAndSearchedStudents.map(student => (
+                      <div 
+                        key={student.id} 
+                        className={cn(
+                          "flex items-center gap-3 px-4 py-3 hover:bg-slate-50 transition-colors cursor-pointer",
+                          selectedStudentIds.has(student.id) ? "bg-indigo-50/40" : ""
+                        )}
+                        onClick={() => toggleStudent(student.id)}
+                      >
+                        <input 
+                          type="checkbox" 
+                          className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 h-4 w-4 pointer-events-none"
+                          checked={selectedStudentIds.has(student.id)}
+                          readOnly
+                        />
+                        <div>
+                          <div className="text-sm font-medium text-slate-900">{student.lastName}, {student.firstName}</div>
+                          <div className="text-xs text-slate-500">{student.user.email}</div>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </>
+            )}
           </CardContent>
         </Card>
       </div>
