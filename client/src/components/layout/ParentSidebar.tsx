@@ -1,12 +1,12 @@
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/store/authStore';
 import {
-    CreditCard,
-    LayoutDashboard,
-    LogOut,
-    MessageSquare,
-    Settings,
-    Users
+  CreditCard,
+  LayoutDashboard,
+  LogOut,
+  MessageSquare,
+  Settings,
+  Users
 } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 

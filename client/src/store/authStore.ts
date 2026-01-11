@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { createJSONStorage, persist } from 'zustand/middleware';
 
 export type UserRole = 'SUPER_ADMIN' | 'ADMIN' | 'TEACHER' | 'STUDENT' | 'PARENT';
 
@@ -26,11 +26,20 @@ export const useAuthStore = create<AuthState>()(
       user: null,
       token: null,
       isAuthenticated: false,
-      login: (user, token) => set({ user, token, isAuthenticated: true }),
-      logout: () => set({ user: null, token: null, isAuthenticated: false }),
+      login: (user, token) => {
+        console.log("🔐 Store: Logging in user", user.role);
+        set({ user, token, isAuthenticated: true });
+      },
+      logout: () => {
+        console.log("🔒 Store: Logging out");
+        set({ user: null, token: null, isAuthenticated: false });
+        // Optional: Hard clear storage
+        localStorage.removeItem('school-auth-storage');
+      },
     }),
     {
-      name: 'school-auth-storage',
+      name: 'school-auth-storage', // unique name
+      storage: createJSONStorage(() => localStorage), // Force localStorage
     }
   )
 );
