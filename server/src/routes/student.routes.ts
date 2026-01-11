@@ -3,9 +3,10 @@ import { Router } from 'express';
 import {
     createBulkStudents,
     createStudent,
-    deleteStudent, // <--- Import this
+    deleteStudent,
     getStudent,
     getStudents,
+    toggleStatus,
     updateStudent
 } from '../controllers/student.controller';
 import { authenticate } from '../middlewares/auth.middleware';
@@ -15,15 +16,19 @@ const router = Router();
 
 router.use(authenticate);
 
+// READ
 router.get('/', restrictTo('SUPER_ADMIN', 'ADMIN', 'TEACHER'), getStudents);
 router.get('/:id', restrictTo('SUPER_ADMIN', 'ADMIN', 'TEACHER'), getStudent);
 
+// WRITE
 router.post('/', restrictTo('SUPER_ADMIN', 'ADMIN'), createStudent);
 router.patch('/:id', restrictTo('SUPER_ADMIN', 'ADMIN'), updateStudent);
 
-// === NEW: DELETE ROUTE ===
+// STATUS & DELETE
+router.patch('/:id/status', restrictTo('SUPER_ADMIN', 'ADMIN'), toggleStatus);
 router.delete('/:id', restrictTo('SUPER_ADMIN', 'ADMIN'), deleteStudent);
 
+// BULK
 router.post('/bulk', restrictTo('SUPER_ADMIN', 'ADMIN'), createBulkStudents);
 
 export default router;

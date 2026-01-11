@@ -1,15 +1,17 @@
 // FILE: server/src/services/student.service.ts
-import { Gender, Prisma, UserRole } from '@prisma/client'; // Import Prisma types
+import { Gender, Prisma, UserRole } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import prisma from '../utils/prisma';
 
-// PROFESSIONAL: Accept Query Parameters for Scalability
+// --- Interfaces ---
 interface StudentQueryParams {
   page?: number;
   limit?: number;
   search?: string;
   status?: 'ACTIVE' | 'INACTIVE' | 'ALL';
 }
+
+// --- Read Operations ---
 
 export const getAllStudents = async ({ 
   page = 1, 
@@ -25,7 +27,7 @@ export const getAllStudents = async ({
     AND: [
       // Status Filter
       status !== 'ALL' ? { user: { isActive: status === 'ACTIVE' } } : {},
-      // Search Filter (Matches First, Last, or Email)
+      // Search Filter
       search ? {
         OR: [
           { firstName: { contains: search, mode: 'insensitive' } },
@@ -36,7 +38,7 @@ export const getAllStudents = async ({
     ]
   };
 
-  // 2. Execute Queries in Parallel (Count + Data)
+  // 2. Execute Queries
   const [total, students] = await prisma.$transaction([
     prisma.student.count({ where: whereClause }),
     prisma.student.findMany({
@@ -55,7 +57,6 @@ export const getAllStudents = async ({
     })
   ]);
 
-  // 3. Return Standardized Pagination Response
   return {
     data: students,
     meta: {
@@ -67,12 +68,27 @@ export const getAllStudents = async ({
   };
 };
 
+export const getStudentById = async (id: string) => {
+  return await prisma.student.findUnique({
+    where: { id },
+    include: { 
+      user: { select: { email: true, isActive: true } },
+      enrollments: { include: { section: true } },
+      studentFees: { include: { feeStructure: true } } 
+    }
+  });
+};
+
+// --- Write Operations ---
+
 export const createStudent = async (data: any) => {
-  // ... (Keep existing Create logic)
-  const existingUser = await prisma.user.findUnique({ where: { email: data.email } });
+  const existingUser = await prisma.user.findUnique({
+    where: { email: data.email }
+  });
   if (existingUser) throw new Error('Email already in use');
 
-  const hashedPassword = await bcrypt.hash('Student123', 10);
+  const passwordToHash = data.password || 'Student123';
+  const hashedPassword = await bcrypt.hash(passwordToHash, 10);
 
   return await prisma.user.create({
     data: {
@@ -95,20 +111,7 @@ export const createStudent = async (data: any) => {
   });
 };
 
-export const getStudentById = async (id: string) => {
-  // ... (Keep existing GetById logic)
-  return await prisma.student.findUnique({
-    where: { id },
-    include: { 
-      user: { select: { email: true, isActive: true } },
-      enrollments: { include: { section: true } },
-      studentFees: { include: { feeStructure: true } }
-    }
-  });
-};
-
 export const updateStudent = async (id: string, data: any) => {
-  // ... (Keep existing Update logic)
   return await prisma.student.update({
     where: { id },
     data: {
@@ -123,8 +126,23 @@ export const updateStudent = async (id: string, data: any) => {
   });
 };
 
-// === NEW: SOFT DELETE (DEACTIVATE) ===
-export const deactivateStudent = async (id: string) => {
+// === TOGGLE STATUS (Soft Delete) ===
+export const toggleStudentStatus = async (id: string) => {
+  const student = await prisma.student.findUnique({ 
+    where: { id },
+    select: { userId: true, user: { select: { isActive: true } } } 
+  });
+
+  if (!student) throw new Error("Student not found");
+
+  return await prisma.user.update({
+    where: { id: student.userId },
+    data: { isActive: !student.user.isActive }
+  });
+};
+
+// === PERMANENT DELETE (Hard Delete) ===
+export const deleteStudentPermanently = async (id: string) => {
   const student = await prisma.student.findUnique({ 
     where: { id },
     select: { userId: true } 
@@ -132,9 +150,8 @@ export const deactivateStudent = async (id: string) => {
 
   if (!student) throw new Error("Student not found");
 
-  // We don't delete the record. We just lock the account.
-  return await prisma.user.update({
-    where: { id: student.userId },
-    data: { isActive: false }
+  // Deleting the User will delete the Student Profile due to Cascade delete
+  return await prisma.user.delete({
+    where: { id: student.userId }
   });
 };

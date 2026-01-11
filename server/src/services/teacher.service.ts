@@ -3,12 +3,15 @@ import { Prisma, UserRole } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import prisma from '../utils/prisma';
 
+// --- Interfaces ---
 interface TeacherQueryParams {
   page?: number;
   limit?: number;
   search?: string;
   status?: 'ACTIVE' | 'INACTIVE' | 'ALL';
 }
+
+// --- Read Operations ---
 
 export const getAllTeachers = async ({ 
   page = 1, 
@@ -21,9 +24,7 @@ export const getAllTeachers = async ({
   // 1. Build Filter
   const whereClause: Prisma.TeacherWhereInput = {
     AND: [
-      // Status Filter
       status !== 'ALL' ? { user: { isActive: status === 'ACTIVE' } } : {},
-      // Search Filter
       search ? {
         OR: [
           { firstName: { contains: search, mode: 'insensitive' } },
@@ -43,9 +44,9 @@ export const getAllTeachers = async ({
       take: limit,
       skip: skip,
       include: {
-        // FIXED: Removed 'lastLogin' (it doesn't exist in your DB)
+        // FIXED: Removed 'lastLogin' because it does not exist in your database
         user: { select: { email: true, isActive: true } },
-        // This count is safe because Teacher -> Classes relation exists
+        // Count assigned classes to show workload
         _count: {
           select: { classes: true } 
         }
@@ -76,13 +77,14 @@ export const getTeacherById = async (id: string) => {
         include: {
           subject: true,
           section: true,
-          // FIXED: Removed '_count: { enrollments: true }'
-          // Reason: Classes belong to Sections. We count students via the Section, not the Class directly.
+          // FIXED: Removed '_count: { enrollments: true }' because Class does not link directly to Enrollment in your schema
         }
       }
     }
   });
 };
+
+// --- Write Operations ---
 
 export const createTeacher = async (data: any) => {
   const existingUser = await prisma.user.findUnique({
@@ -90,13 +92,15 @@ export const createTeacher = async (data: any) => {
   });
   if (existingUser) throw new Error('Email already in use');
 
-  const hashedPassword = await bcrypt.hash('Teacher123', 10);
+  // FIX: Use provided password or fallback
+  const passwordToHash = data.password || 'Teacher123';
+  const hashedPassword = await bcrypt.hash(passwordToHash, 10);
 
   return await prisma.$transaction(async (tx) => {
     const newUser = await tx.user.create({
       data: {
         email: data.email,
-        password: hashedPassword,
+        password: hashedPassword, // Stores correct hash
         role: UserRole.TEACHER,
         isActive: true
       }
