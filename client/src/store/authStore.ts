@@ -1,63 +1,66 @@
 // FILE: client/src/store/authStore.ts
 import { create } from 'zustand';
-import { createJSONStorage, persist } from 'zustand/middleware';
-import api from '../lib/axios'; // Ensure you have this import to set headers
+import api from '../lib/axios';
 
-export type UserRole = 'SUPER_ADMIN' | 'ADMIN' | 'TEACHER' | 'STUDENT' | 'PARENT';
-
-interface User {
+export interface User {
   id: string;
   email: string;
-  firstName: string;
-  lastName: string;
-  role: UserRole;
-  avatar?: string;
+  role: 'ADMIN' | 'TEACHER' | 'STUDENT' | 'PARENT' | 'HR';
+  name: string;
 }
 
 interface AuthState {
   user: User | null;
-  token: string | null;
   isAuthenticated: boolean;
-  login: (user: User, token: string) => void;
-  logout: () => void;
-  initialize: () => void; // <--- ADDED THIS DEFINITION
+  isLoading: boolean;
+  // Upgrade: login now returns the User object or throws
+  login: (credentials: any) => Promise<User>; 
+  logout: () => Promise<void>;
+  initialize: () => Promise<void>;
 }
 
-export const useAuthStore = create<AuthState>()(
-  persist(
-    (set, get) => ({
-      user: null,
-      token: null,
-      isAuthenticated: false,
+export const useAuthStore = create<AuthState>((set) => ({
+  user: null,
+  isAuthenticated: false,
+  isLoading: true,
 
-      login: (user, token) => {
-        console.log("🔐 Store: Logging in user", user.role);
-        // Set the default Authorization header for future requests
-        api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-        set({ user, token, isAuthenticated: true });
-      },
-
-      logout: () => {
-        console.log("🔒 Store: Logging out");
-        // Remove the header
-        delete api.defaults.headers.common['Authorization'];
-        set({ user: null, token: null, isAuthenticated: false });
-        localStorage.removeItem('school-auth-storage');
-      },
-
-      // === CRITICAL FIX: ADDED INITIALIZE FUNCTION ===
-      initialize: () => {
-        const state = get();
-        if (state.token) {
-          console.log("🔄 Store: Restoring Session");
-          // Re-attach the token to Axios so requests work after refresh
-          api.defaults.headers.common['Authorization'] = `Bearer ${state.token}`;
-        }
+  initialize: async () => {
+    try {
+      const { data } = await api.get('/auth/me');
+      if (data.success && data.user) {
+        set({ user: data.user, isAuthenticated: true });
       }
-    }),
-    {
-      name: 'school-auth-storage',
-      storage: createJSONStorage(() => localStorage),
+    } catch (error) {
+      set({ user: null, isAuthenticated: false });
+    } finally {
+      set({ isLoading: false });
     }
-  )
-);
+  },
+
+  login: async (credentials) => {
+    // 1. Call API
+    const { data } = await api.post('/auth/login', credentials);
+    
+    // 2. Validate Response
+    if (!data.success || !data.user) {
+      throw new Error(data.message || 'Login failed: Invalid server response');
+    }
+
+    // 3. Update State
+    set({ user: data.user, isAuthenticated: true });
+
+    // 4. Return User (Critical for preventing race conditions in UI)
+    return data.user; 
+  },
+
+  logout: async () => {
+    try {
+      await api.post('/auth/logout');
+    } catch (error) {
+      console.warn("Logout endpoint failed, clearing client state anyway");
+    } finally {
+      set({ user: null, isAuthenticated: false });
+      localStorage.clear();
+    }
+  }
+}));
