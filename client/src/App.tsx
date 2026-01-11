@@ -8,19 +8,15 @@ import { useAuthStore } from './store/authStore';
 // === 1. SMART LAZY LOADER ===
 // This helper function automatically finds the component whether it's
 // exported as "default" OR as a named export (like "Dashboard").
-// It prevents the "Cannot convert object to primitive value" crash.
 const load = (importPromise: Promise<any>, name?: string) => {
   return lazy(() => 
     importPromise.then(module => {
-      // Case A: Named export found (e.g., export const Dashboard)
       if (name && module[name]) {
         return { default: module[name] };
       }
-      // Case B: Default export found (e.g., export default Dashboard)
       if (module.default) {
         return { default: module.default };
       }
-      // Case C: Fallback (prevents crash, shows error)
       throw new Error(`Module loaded but component ${name || 'Default'} was not found.`);
     })
   );
@@ -34,7 +30,7 @@ const StudentLayout = load(import('./components/layout/StudentLayout'), 'Student
 const TeacherLayout = load(import('./components/layout/TeacherLayout'), 'TeacherLayout');
 const ParentLayout = load(import('./components/layout/ParentLayout'), 'ParentLayout');
 
-// Auth (FIXED: Handles Default Export correctly now)
+// Auth
 const LoginForm = load(import('./features/auth/LoginForm'), 'LoginForm');
 
 // Dashboards
@@ -43,22 +39,29 @@ const StudentDashboard = load(import('./features/students/StudentDashboard'), 'S
 const TeacherDashboard = load(import('./features/teachers/TeacherDashboard'), 'TeacherDashboard');
 const ParentDashboard = load(import('./features/parent/ParentDashboard'), 'ParentDashboard');
 
-// Features
+// Features - Students
 const StudentList = load(import('./features/students/StudentList'), 'StudentList');
 const AddStudent = load(import('./features/students/AddStudent'), 'AddStudent');
 const EnrollStudent = load(import('./features/students/EnrollStudent'), 'EnrollStudent');
 const StudentGrades = load(import('./features/students/StudentGrades'), 'StudentGrades');
 
+// Features - Teachers
 const TeacherList = load(import('./features/teachers/TeacherList'), 'TeacherList');
 const AddTeacher = load(import('./features/teachers/AddTeacher'), 'AddTeacher');
 
+// Features - Parents (NEW)
+const ParentList = load(import('./features/parents/ParentList'), 'ParentList');
+
+// Features - Classes
 const ClassList = load(import('./features/classes/ClassList'), 'ClassList');
 const AddClass = load(import('./features/classes/AddClass'), 'AddClass');
 const Gradebook = load(import('./features/classes/Gradebook'), 'Gradebook');
 
+// Features - Finance
 const FeeList = load(import('./features/finance/FeeList'), 'FeeList');
 const StudentLedger = load(import('./features/finance/StudentLedger'), 'StudentLedger');
 
+// Features - Settings
 const Settings = load(import('./features/settings/Settings'), 'Settings');
 
 // LMS
@@ -95,16 +98,29 @@ function App() {
             {/* === ADMIN PORTAL === */}
             <Route element={<DashboardLayout />}>
               <Route path="/dashboard" element={<Dashboard />} />
+              
+              {/* Students */}
               <Route path="/students" element={<StudentList />} />
               <Route path="/students/new" element={<AddStudent />} />
               <Route path="/students/enroll" element={<EnrollStudent />} />
+              <Route path="/students/:studentId/ledger" element={<StudentLedger />} />
+              
+              {/* Teachers */}
               <Route path="/teachers" element={<TeacherList />} />
               <Route path="/teachers/new" element={<AddTeacher />} />
+              
+              {/* Parents (NEW ROUTE) */}
+              <Route path="/parents" element={<ParentList />} />
+
+              {/* Classes */}
               <Route path="/classes" element={<ClassList />} />
               <Route path="/classes/new" element={<AddClass />} />
               <Route path="/classes/:classId/grading" element={<Gradebook />} />
+              
+              {/* Finance */}
               <Route path="/finance" element={<FeeList />} />
-              <Route path="/students/:studentId/ledger" element={<StudentLedger />} />
+              
+              {/* Settings */}
               <Route path="/settings" element={<Settings />} />
             </Route>
 
