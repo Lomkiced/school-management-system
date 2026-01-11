@@ -1,5 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Loader2 } from 'lucide-react';
+import { AlertCircle, Loader2 } from 'lucide-react';
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useNavigate } from 'react-router-dom';
@@ -23,6 +23,7 @@ export default function LoginForm() {
   const navigate = useNavigate();
   const login = useAuthStore((state) => state.login);
   const [isLoading, setIsLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const form = useForm<LoginFormData>({
     resolver: zodResolver(loginSchema),
@@ -34,17 +35,44 @@ export default function LoginForm() {
 
   const onSubmit = async (data: LoginFormData) => {
     setIsLoading(true);
+    setErrorMessage(null);
+    console.log("🚀 STARTING LOGIN...");
+
     try {
-      // 1. Call the API
-      const response = await api.post('/auth/login', data);
-      const { user, token } = response.data;
+      // 1. Send Request
+      const response = await api.post('/auth/login', {
+        email: data.email.trim(),
+        password: data.password.trim()
+      });
 
-      // 2. Save to Store
+      console.log("📥 Raw Response:", response);
+
+      // 2. SMART DATA EXTRACTION (The Fix)
+      // This handles if axios interceptors are used OR not used
+      const responseData = response.data || response;
+      
+      // Look for user/token in different common places
+      const user = responseData.user || responseData.data?.user;
+      const token = responseData.token || responseData.data?.token;
+
+      console.log("🕵️ Extracted Data:", { user, token });
+
+      // 3. Validation
+      if (!user || !token) {
+        console.error("❌ Data missing from response. Structure received:", responseData);
+        throw new Error("Server response was successful but missing User or Token data.");
+      }
+
+      // 4. Save to Store
       login(user, token);
-      toast.success(`Welcome back, ${user.firstName}!`);
+      toast.success(`Welcome back, ${user.firstName || 'User'}!`);
 
-      // 3. INTELLIGENT ROUTING (The Professional Part)
-      switch (user.role) {
+      // 5. Case-Insensitive Routing
+      // We convert role to UPPERCASE to be safe
+      const role = (user.role || '').toUpperCase();
+      console.log("🧭 Routing for Role:", role);
+
+      switch (role) {
         case 'SUPER_ADMIN':
         case 'ADMIN':
           navigate('/dashboard');
@@ -56,14 +84,31 @@ export default function LoginForm() {
           navigate('/student/dashboard');
           break;
         case 'PARENT':
-          navigate('/parent/dashboard'); // <--- NEW ROUTE
+          navigate('/parent/dashboard');
           break;
         default:
+          console.warn("⚠️ Unknown role:", role);
           navigate('/');
       }
+
     } catch (error: any) {
-      console.error(error);
-      toast.error(error.response?.data?.message || 'Invalid credentials');
+      console.error("🔥 LOGIN CRASH:", error);
+      
+      let msg = "An unexpected error occurred.";
+      
+      if (error.response) {
+        // Server responded with 400/401/500
+        msg = error.response.data?.message || `Server Error (${error.response.status})`;
+      } else if (error.request) {
+        // Server unreachable
+        msg = "Cannot connect to server. Is the backend running?";
+      } else {
+        // Code error
+        msg = error.message;
+      }
+      
+      setErrorMessage(msg);
+      toast.error(msg);
     } finally {
       setIsLoading(false);
     }
@@ -77,6 +122,13 @@ export default function LoginForm() {
           <CardDescription>Enter your credentials to access your account</CardDescription>
         </CardHeader>
         <CardContent>
+          {errorMessage && (
+            <div className="mb-4 flex items-center gap-2 rounded-md bg-red-50 p-3 text-sm text-red-600 border border-red-200">
+              <AlertCircle className="h-4 w-4" />
+              {errorMessage}
+            </div>
+          )}
+          
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
             <div className="space-y-2">
               <Input
@@ -104,17 +156,12 @@ export default function LoginForm() {
               {isLoading ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Signing in...
+                  Authenticating...
                 </>
               ) : (
                 'Sign In'
               )}
             </Button>
-            
-            {/* Quick Helper for Demo Purposes */}
-            <div className="mt-4 text-center text-xs text-gray-400">
-               Demo: parent@school.com / password123
-            </div>
           </form>
         </CardContent>
       </Card>

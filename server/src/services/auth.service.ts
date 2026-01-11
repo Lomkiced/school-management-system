@@ -60,7 +60,12 @@ export const registerUser = async (data: any) => {
 };
 
 export const loginUser = async (data: any) => {
-  // 1. Find User including all profiles
+  console.log('------------------------------------------------');
+  console.log('🕵️ SENIOR DEV DEBUGGER: Login Attempt');
+  console.log(`📩 Email Received: [${data.email}]`);
+  console.log(`🔑 Password Received: [${data.password}]`);
+
+  // 1. Find User
   const user = await prisma.user.findUnique({
     where: { email: data.email },
     include: {
@@ -72,20 +77,29 @@ export const loginUser = async (data: any) => {
   });
 
   if (!user) {
+    console.error('❌ LOGIN FAILED: User not found in database.');
+    console.log('------------------------------------------------');
     throw new Error('Invalid credentials');
   }
+
+  console.log(`✅ User Found: ID [${user.id}], Role [${user.role}]`);
+  console.log(`💾 Stored Hash: ${user.password.substring(0, 10)}...`);
 
   // 2. Check Password
   const isMatch = await bcrypt.compare(data.password, user.password);
   
+  console.log(`⚖️  Password Comparison Result: ${isMatch ? 'MATCH ✅' : 'MISMATCH ❌'}`);
+
   if (!isMatch) {
+    console.error('❌ LOGIN FAILED: Password hash did not match.');
+    console.log('------------------------------------------------');
     throw new Error('Invalid credentials');
   }
 
-  // 3. Get Name safely
+  // 3. Extract Name (Existing Logic)
   let firstName = 'User';
   let lastName = '';
-
+  
   if (user.role === 'PARENT' && user.parentProfile) {
     firstName = user.parentProfile.firstName;
     lastName = user.parentProfile.lastName;
@@ -100,8 +114,10 @@ export const loginUser = async (data: any) => {
     lastName = user.adminProfile.lastName;
   }
 
-  // 4. Generate Token
   const token = generateToken(user.id, user.role);
+
+  console.log('🎉 LOGIN SUCCESS: Returning Token');
+  console.log('------------------------------------------------');
 
   return { 
     user: { 
