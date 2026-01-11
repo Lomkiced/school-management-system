@@ -34,17 +34,22 @@ interface DashboardStats {
 }
 
 const StatCard = ({ title, value, icon: Icon, color }: any) => (
-  <Card className="border-l-4 shadow-sm hover:shadow-md transition-shadow" style={{ borderLeftColor: color || '#cbd5e1' }}>
-    <CardContent className="p-6">
-      <div className="flex items-center justify-between space-y-0 pb-2">
+  <Card className="relative overflow-hidden border-none shadow-md hover:shadow-xl transition-all duration-300 group">
+    {/* Gradient Background Effect */}
+    <div className="absolute top-0 right-0 -mt-4 -mr-4 w-24 h-24 rounded-full bg-gradient-to-br from-white/0 to-current opacity-10 group-hover:scale-150 transition-transform duration-500" style={{ color }} />
+    
+    <CardContent className="p-6 relative z-10">
+      <div className="flex items-center justify-between pb-2">
         <p className="text-sm font-medium text-slate-500">{title}</p>
-        <div className="p-2 rounded-full bg-slate-50">
-          <Icon className="h-5 w-5" style={{ color: color }} />
+        <div className="p-2.5 rounded-xl bg-slate-50 group-hover:bg-white group-hover:shadow-sm transition-all">
+          <Icon className="h-5 w-5" style={{ color }} />
         </div>
       </div>
-      <div className="flex items-end justify-between mt-3">
-        <div className="text-3xl font-bold text-slate-800">{value}</div>
+      <div className="flex items-end justify-between mt-4">
+        <div className="text-3xl font-bold text-slate-800 tracking-tight">{value}</div>
       </div>
+      {/* Decorative Line */}
+      <div className="absolute bottom-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-current to-transparent opacity-30" style={{ color }} />
     </CardContent>
   </Card>
 );

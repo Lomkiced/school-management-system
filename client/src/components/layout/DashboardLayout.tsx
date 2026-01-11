@@ -1,28 +1,24 @@
-import { Navigate, Outlet } from 'react-router-dom';
-import { useAuthStore } from '../../store/authStore';
+// FILE: client/src/components/layout/DashboardLayout.tsx
+import { Outlet } from 'react-router-dom';
+import { cn } from '../../lib/utils';
+import { useSidebarStore } from '../../store/sidebarStore'; // <--- IMPORT STORE
 import { Sidebar } from './Sidebar';
 
 export const DashboardLayout = () => {
-  const { user, token } = useAuthStore();
-
-  if (!token || !user) {
-    return <Navigate to="/login" replace />;
-  }
+  const { isExpanded } = useSidebarStore(); // <--- READ STATE
 
   return (
-    // 1. FLEX CONTAINER: Forces side-by-side layout
-    <div className="flex h-screen w-full bg-slate-50 overflow-hidden">
-      
-      {/* 2. SIDEBAR: Fixed width, never shrinks */}
-      <aside className="w-64 flex-shrink-0 h-full border-r border-slate-200 bg-white shadow-sm z-10 hidden md:block">
-        <Sidebar />
-      </aside>
-
-      {/* 3. MAIN CONTENT: Takes remaining space */}
-      <main className="flex-1 flex flex-col h-full min-w-0 overflow-hidden">
-        {/* Scrollable Area */}
-        <div className="flex-1 overflow-y-auto p-4 md:p-8">
-           <Outlet />
+    <div className="min-h-screen bg-slate-50/50">
+      <Sidebar />
+      {/* Dynamic Padding based on State */}
+      <main 
+        className={cn(
+          "pt-16 md:pt-0 w-full min-h-screen transition-all duration-300 ease-in-out",
+          isExpanded ? "md:pl-64" : "md:pl-[70px]"
+        )}
+      >
+        <div className="container mx-auto p-6 md:p-8 max-w-7xl animate-in fade-in duration-500">
+          <Outlet />
         </div>
       </main>
     </div>

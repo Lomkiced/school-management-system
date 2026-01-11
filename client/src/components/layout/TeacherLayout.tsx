@@ -1,18 +1,24 @@
-import { Navigate, Outlet } from 'react-router-dom';
-import { useAuthStore } from '../../store/authStore';
+// FILE: client/src/components/layout/TeacherLayout.tsx
+import { Outlet } from 'react-router-dom';
+import { cn } from '../../lib/utils';
+import { useSidebarStore } from '../../store/sidebarStore';
 import { TeacherSidebar } from './TeacherSidebar';
 
 export const TeacherLayout = () => {
-  const user = useAuthStore((state) => state.user);
-  if (!user) return <Navigate to="/login" replace />;
-  // Security Check: Kick out students/admins
-  // if (user.role !== 'TEACHER') return <Navigate to="/login" replace />; 
+  const { isExpanded } = useSidebarStore();
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen bg-slate-50/50">
       <TeacherSidebar />
-      <main className="ml-64 p-8">
-        <div className="max-w-7xl mx-auto"><Outlet /></div>
+      <main 
+        className={cn(
+          "pt-16 md:pt-0 w-full min-h-screen transition-all duration-300 ease-in-out",
+          isExpanded ? "md:pl-64" : "md:pl-[70px]"
+        )}
+      >
+        <div className="container mx-auto p-6 md:p-8 max-w-7xl animate-in fade-in duration-500">
+          <Outlet />
+        </div>
       </main>
     </div>
   );

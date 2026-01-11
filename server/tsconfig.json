@@ -13,13 +13,24 @@
 
     /* Emit */
     "outDir": "./dist",
-    "rootDir": "./src",             // <--- The rule you set
+    "rootDir": "./src",
 
     /* Type Checking */
     "strict": true,
     "skipLibCheck": true,
-    "forceConsistentCasingInFileNames": true
+    "forceConsistentCasingInFileNames": true,
+
+    /* === CRITICAL FIXES FOR TYPES === */
+    // 1. Explicitly tell TS where to look for custom types
+    "typeRoots": ["./node_modules/@types", "./src/types"] 
   },
-  "include": ["src/**/*"],          // <--- FIX: Only compile files inside src
-  "exclude": ["node_modules", "prisma", "test-socket.ts"] // <--- FIX: Explicitly ignore these
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "prisma", "test-socket.ts"],
+
+  /* === CRITICAL FIX FOR TS-NODE === */
+  // 2. Force ts-node to load all files in 'include', not just imported ones.
+  // This ensures express.d.ts is actually read.
+  "ts-node": {
+    "files": true
+  }
 }
