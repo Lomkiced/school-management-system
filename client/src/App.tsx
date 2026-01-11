@@ -1,23 +1,23 @@
+// FILE: client/src/App.tsx
 import { Navigate, Route, BrowserRouter as Router, Routes } from 'react-router-dom';
 import { Toaster } from 'sonner';
 
 // Features - Auth
-import LoginForm from './features/auth/LoginForm';
+import LoginForm from './features/auth/LoginForm'; // This is correct (it uses export default)
 
-// Features - Dashboards
-import Dashboard from './features/dashboard/Dashboard'; // Admin
-import ParentDashboard from './features/parent/ParentDashboard'; // <--- NEW
-import StudentDashboard from './features/students/StudentDashboard';
-import TeacherDashboard from './features/teachers/TeacherDashboard';
+// Features - Dashboards (FIXED: Added curly braces for Named Exports)
+import { Dashboard } from './features/dashboard/Dashboard';
+import ParentDashboard from './features/parent/ParentDashboard'; // This uses export default
+import { StudentDashboard } from './features/students/StudentDashboard';
+import { TeacherDashboard } from './features/teachers/TeacherDashboard';
 
-// Layouts
-import DashboardLayout from './components/layout/DashboardLayout'; // Admin Layout
-import ParentLayout from './components/layout/ParentLayout'; // <--- NEW
-import StudentLayout from './components/layout/StudentLayout';
-import TeacherLayout from './components/layout/TeacherLayout';
+// Layouts (FIXED: Added curly braces for Named Exports)
+import { DashboardLayout } from './components/layout/DashboardLayout';
+import ParentLayout from './components/layout/ParentLayout'; // This uses export default
+import { StudentLayout } from './components/layout/StudentLayout';
+import { TeacherLayout } from './components/layout/TeacherLayout';
 
-// Guards (Assuming you might have a generic ProtectedRoute wrapper, 
-// if not, we use this simple inline check or your existing one)
+// Guards
 import { useAuthStore } from './store/authStore';
 
 function ProtectedRoute({ children, allowedRoles }: { children: React.ReactNode, allowedRoles: string[] }) {
@@ -52,7 +52,6 @@ export default function App() {
           }
         >
           <Route path="/dashboard" element={<Dashboard />} />
-          {/* Add other admin routes here */}
         </Route>
 
         {/* TEACHER ROUTES */}
@@ -77,7 +76,7 @@ export default function App() {
           <Route path="/student/dashboard" element={<StudentDashboard />} />
         </Route>
 
-        {/* === PARENT ROUTES (NEW) === */}
+        {/* PARENT ROUTES */}
         <Route 
           element={
             <ProtectedRoute allowedRoles={['PARENT']}>

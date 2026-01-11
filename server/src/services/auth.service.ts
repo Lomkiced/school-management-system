@@ -60,9 +60,15 @@ export const registerUser = async (data: any) => {
 };
 
 export const loginUser = async (data: any) => {
-  // 1. Find User
+  // 1. Find User AND fetch their specific profile
   const user = await prisma.user.findUnique({
     where: { email: data.email },
+    include: {
+      studentProfile: true,
+      teacherProfile: true,
+      parentProfile: true,
+      adminProfile: true,
+    },
   });
 
   if (!user) {
@@ -76,8 +82,36 @@ export const loginUser = async (data: any) => {
     throw new Error('Invalid credentials');
   }
 
-  // 3. Generate Token
+  // 3. Extract the Name based on Role (The Professional Way)
+  let firstName = 'User';
+  let lastName = '';
+  
+  if (user.role === 'STUDENT' && user.studentProfile) {
+    firstName = user.studentProfile.firstName;
+    lastName = user.studentProfile.lastName;
+  } else if (user.role === 'TEACHER' && user.teacherProfile) {
+    firstName = user.teacherProfile.firstName;
+    lastName = user.teacherProfile.lastName;
+  } else if (user.role === 'PARENT' && user.parentProfile) {
+    firstName = user.parentProfile.firstName;
+    lastName = user.parentProfile.lastName;
+  } else if (user.adminProfile) {
+    firstName = user.adminProfile.firstName;
+    lastName = user.adminProfile.lastName;
+  }
+
+  // 4. Generate Token
   const token = generateToken(user.id, user.role);
 
-  return { user: { id: user.id, email: user.email, role: user.role }, token };
+  // 5. Return the full identity
+  return { 
+    user: { 
+      id: user.id, 
+      email: user.email, 
+      role: user.role,
+      firstName,  // <--- Now the frontend will say "Welcome, John!"
+      lastName
+    }, 
+    token 
+  };
 };

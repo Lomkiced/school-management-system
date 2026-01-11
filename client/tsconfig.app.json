@@ -24,7 +24,7 @@
     "noFallthroughCasesInSwitch": true,
     "noUncheckedSideEffectImports": true,
 
-    /* === THIS IS THE MISSING PART === */
+    /* === PATH ALIASES (This was missing) === */
     "baseUrl": ".",
     "paths": {
       "@/*": ["./src/*"]
