@@ -48,7 +48,7 @@ export const SidebarShell = ({ title, links, colorTheme = 'indigo' }: SidebarShe
 
   return (
     <>
-      {/* === MOBILE HEADER === */}
+      {/* MOBILE HEADER */}
       <div className="md:hidden fixed top-0 left-0 right-0 h-16 bg-white border-b z-50 flex items-center justify-between px-4 shadow-sm">
         <div className="flex items-center gap-3">
           <div className="h-8 w-8 bg-indigo-600 rounded-lg flex items-center justify-center text-white font-bold">
@@ -61,7 +61,7 @@ export const SidebarShell = ({ title, links, colorTheme = 'indigo' }: SidebarShe
         </Button>
       </div>
 
-      {/* === MOBILE DRAWER === */}
+      {/* MOBILE DRAWER */}
       {isMobileOpen && (
         <div className="md:hidden fixed inset-0 z-40 bg-white pt-20 px-4 animate-in slide-in-from-left-10 duration-200">
            <div className="space-y-2">
@@ -85,7 +85,7 @@ export const SidebarShell = ({ title, links, colorTheme = 'indigo' }: SidebarShe
         </div>
       )}
 
-      {/* === DESKTOP SIDEBAR === */}
+      {/* DESKTOP SIDEBAR */}
       <div className="hidden md:block fixed inset-y-0 left-0 z-50">
         <aside
           className={cn(
@@ -93,14 +93,13 @@ export const SidebarShell = ({ title, links, colorTheme = 'indigo' }: SidebarShe
             isExpanded ? "w-64" : "w-[70px]" 
           )}
         >
-          {/* HEADER */}
+          {/* Header */}
           <div className="h-16 flex items-center border-b border-slate-100 shrink-0 bg-white overflow-hidden relative">
              <div className="w-[70px] flex items-center justify-center shrink-0">
                 <div className="h-9 w-9 bg-indigo-600 rounded-xl flex items-center justify-center text-white font-bold text-xl shadow-lg shadow-indigo-200">
                   {title.charAt(0)}
                 </div>
              </div>
-             
              <div className={cn(
                "transition-all duration-300 whitespace-nowrap overflow-hidden flex-1",
                isExpanded ? "opacity-100 translate-x-0" : "opacity-0 -translate-x-4"
@@ -109,12 +108,7 @@ export const SidebarShell = ({ title, links, colorTheme = 'indigo' }: SidebarShe
              </div>
           </div>
 
-          {/* === UPGRADED TOGGLE BUTTON === */}
-          {/* - Increased size (h-8 w-8)
-              - Added clear icon (PanelLeftClose/Open)
-              - Added ring for focus/hover visibility
-              - Positioned exactly halfway (-right-4)
-          */}
+          {/* Toggle Button */}
           <button 
             onClick={toggle}
             className="absolute -right-4 top-[20px] h-8 w-8 bg-white border border-slate-200 rounded-full flex items-center justify-center shadow-md text-slate-600 hover:text-indigo-600 hover:border-indigo-300 hover:shadow-lg transition-all z-50 ring-2 ring-transparent hover:ring-indigo-100"
@@ -123,7 +117,7 @@ export const SidebarShell = ({ title, links, colorTheme = 'indigo' }: SidebarShe
             {isExpanded ? <PanelLeftClose className="h-4 w-4" /> : <PanelLeftOpen className="h-4 w-4" />}
           </button>
 
-          {/* NAV ITEMS */}
+          {/* Navigation */}
           <div className="flex-1 py-6 space-y-1 overflow-y-auto overflow-x-hidden">
             {links.map((link) => {
               const active = isActive(link.href);
@@ -136,7 +130,6 @@ export const SidebarShell = ({ title, links, colorTheme = 'indigo' }: SidebarShe
                     getActiveStyle(active)
                   )}
                 >
-                  {/* Icon Area */}
                   <div className="w-[70px] flex items-center justify-center shrink-0">
                     <link.icon className={cn(
                       "h-5 w-5 transition-transform duration-300", 
@@ -144,16 +137,14 @@ export const SidebarShell = ({ title, links, colorTheme = 'indigo' }: SidebarShe
                       link.color && !active ? link.color : ""
                     )} />
                   </div>
-                  
-                  {/* Label */}
                   <span className={cn(
                     "whitespace-nowrap font-medium text-sm transition-all duration-300 origin-left",
                     isExpanded ? "opacity-100 translate-x-0" : "opacity-0 -translate-x-4 hidden"
                   )}>
                     {link.label}
                   </span>
-
-                  {/* TOOLTIP (Collapsed Mode) */}
+                  
+                  {/* Tooltip for collapsed state */}
                   {!isExpanded && (
                     <div className="absolute left-[60px] ml-4 px-3 py-1.5 bg-slate-900 text-white text-xs font-medium rounded-md opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-50 shadow-xl translate-x-2 group-hover:translate-x-0 duration-200">
                       {link.label}
@@ -165,18 +156,16 @@ export const SidebarShell = ({ title, links, colorTheme = 'indigo' }: SidebarShe
             })}
           </div>
 
-          {/* FOOTER */}
+          {/* Footer */}
           <div className="border-t border-slate-100 p-3 bg-slate-50/50 overflow-hidden">
              <div className={cn("flex items-center rounded-xl p-1.5 transition-all cursor-default", isExpanded ? "bg-white shadow-sm border border-slate-100" : "")}>
                 <div className="h-9 w-9 rounded-full bg-slate-200 flex items-center justify-center shrink-0 text-slate-600 font-bold border-2 border-white shadow-sm">
                    {user?.firstName?.charAt(0) || 'U'}
                 </div>
-                
                 <div className={cn("ml-3 overflow-hidden transition-all duration-300", isExpanded ? "w-auto opacity-100" : "w-0 opacity-0")}>
                    <p className="text-sm font-bold text-slate-900 truncate">{user?.firstName}</p>
                    <p className="text-[10px] uppercase font-bold text-slate-400 truncate">{user?.role}</p>
                 </div>
-
                 <button 
                   onClick={() => { logout(); navigate('/login'); }}
                   className={cn("ml-auto hover:bg-red-50 p-2 rounded-lg text-slate-400 hover:text-red-600 transition-all", isExpanded ? "block" : "hidden")}

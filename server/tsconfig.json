@@ -20,16 +20,13 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
 
-    /* === CRITICAL FIXES FOR TYPES === */
-    // 1. Explicitly tell TS where to look for custom types
-    "typeRoots": ["./node_modules/@types", "./src/types"] 
+    /* === FIX: Tell TS where to find types === */
+    "typeRoots": ["./node_modules/@types", "./src/types"]
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "prisma", "test-socket.ts"],
 
-  /* === CRITICAL FIX FOR TS-NODE === */
-  // 2. Force ts-node to load all files in 'include', not just imported ones.
-  // This ensures express.d.ts is actually read.
+  /* === FIX: Tell ts-node to load the types === */
   "ts-node": {
     "files": true
   }
