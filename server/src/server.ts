@@ -15,11 +15,13 @@ import enrollmentRoutes from './routes/enrollment.routes';
 import financeRoutes from './routes/finance.routes';
 import gradingRoutes from './routes/grading.routes';
 import lmsRoutes from './routes/lms.routes';
+import parentRoutes from './routes/parent.routes';
 import portalRoutes from './routes/portal.routes';
 import settingsRoutes from './routes/settings.routes';
 import studentRoutes from './routes/student.routes';
 import teacherPortalRoutes from './routes/teacher-portal.routes';
 import teacherRoutes from './routes/teacher.routes';
+
 
 dotenv.config();
 
@@ -46,7 +48,8 @@ app.use('/api/settings', settingsRoutes);
 app.use('/api/portal', portalRoutes);
 app.use('/api/teacher-portal', teacherPortalRoutes);
 app.use('/api/lms', lmsRoutes);
-app.use('/api/chat', chatRoutes); // <--- NEW ROUTE
+app.use('/api/chat', chatRoutes); 
+app.use('/api/parents', parentRoutes);
 
 // Socket.io Global Events
 io.on('connection', (socket) => {

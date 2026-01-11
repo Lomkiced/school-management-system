@@ -71,3 +71,20 @@ export const quizSchema = z.object({
   questions: z.array(questionSchema).min(1, "At least 1 question required"),
   timeLimit: z.number().optional() // in minutes
 });
+
+// ================= PARENT SCHEMAS =================
+export const createParentSchema = z.object({
+  email: z.string().email("Invalid email address"),
+  firstName: z.string().min(1, "First name is required"),
+  lastName: z.string().min(1, "Last name is required"),
+  phone: z.string().min(10, "Phone number is required"),
+  address: z.string().optional(),
+  relationship: z.string().default('Guardian'),
+  password: z.string().min(6).optional(),
+});
+
+export const updateParentSchema = createParentSchema.partial().omit({ email: true, password: true });
+
+export const linkStudentSchema = z.object({
+  studentIds: z.array(z.string()).min(1, "Select at least one student"),
+});

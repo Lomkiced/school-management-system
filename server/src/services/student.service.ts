@@ -25,9 +25,7 @@ export const getAllStudents = async ({
   // 1. Build Dynamic Filter
   const whereClause: Prisma.StudentWhereInput = {
     AND: [
-      // Status Filter
       status !== 'ALL' ? { user: { isActive: status === 'ACTIVE' } } : {},
-      // Search Filter
       search ? {
         OR: [
           { firstName: { contains: search, mode: 'insensitive' } },
@@ -87,6 +85,7 @@ export const createStudent = async (data: any) => {
   });
   if (existingUser) throw new Error('Email already in use');
 
+  // Use provided password or fallback
   const passwordToHash = data.password || 'Student123';
   const hashedPassword = await bcrypt.hash(passwordToHash, 10);
 
@@ -141,17 +140,30 @@ export const toggleStudentStatus = async (id: string) => {
   });
 };
 
-// === PERMANENT DELETE (Hard Delete) ===
+// === PERMANENT DELETE (Hard Delete - Fixed) ===
 export const deleteStudentPermanently = async (id: string) => {
   const student = await prisma.student.findUnique({ 
     where: { id },
-    select: { userId: true } 
+    select: { id: true, userId: true } 
   });
 
   if (!student) throw new Error("Student not found");
 
-  // Deleting the User will delete the Student Profile due to Cascade delete
-  return await prisma.user.delete({
-    where: { id: student.userId }
-  });
+  // TRANSACTION: Clean up everything linked to the student first
+  return await prisma.$transaction([
+    // 1. Delete Enrollments (Must go first!)
+    prisma.enrollment.deleteMany({ where: { studentId: id } }),
+    
+    // 2. Delete Student Fees (Must go before Student)
+    prisma.studentFee.deleteMany({ where: { studentId: id } }),
+
+    // 3. Delete LMS Submissions/Grades (If you have them later, add them here)
+    // prisma.grade.deleteMany({ where: { studentId: id } }),
+
+    // 4. Delete the Student Profile
+    prisma.student.delete({ where: { id: id } }),
+
+    // 5. Finally, Delete the User Login
+    prisma.user.delete({ where: { id: student.userId } })
+  ]);
 };
