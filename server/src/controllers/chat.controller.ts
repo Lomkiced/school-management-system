@@ -2,9 +2,6 @@
 import { Request, Response } from 'express';
 import * as chatService from '../services/chat.service';
 
-/**
- * Get list of available users to chat with
- */
 export const getContacts = async (req: Request, res: Response) => {
   try {
     const contacts = await chatService.getContacts(req.user!.id);
@@ -14,17 +11,14 @@ export const getContacts = async (req: Request, res: Response) => {
   }
 };
 
-/**
- * Load message history between current user and selected contact
- */
 export const getHistory = async (req: Request, res: Response) => {
   try {
-    const { userId } = req.params; // The ID of the other person
+    const { userId } = req.params;
     const myId = req.user!.id;
 
     const history = await chatService.getChatHistory(myId, userId);
     
-    // Mark these messages as read when history is opened
+    // Automatically mark messages as read when history is fetched
     await chatService.markAsRead(myId, userId);
 
     res.json({ success: true, data: history });
@@ -33,16 +27,13 @@ export const getHistory = async (req: Request, res: Response) => {
   }
 };
 
-/**
- * Send a new real-time message
- */
 export const sendMessage = async (req: Request, res: Response) => {
   try {
     const { receiverId, message } = req.body;
     const senderId = req.user!.id;
 
     if (!message || !receiverId) {
-      return res.status(400).json({ success: false, message: "Missing message or receiver" });
+      return res.status(400).json({ success: false, message: "Receiver and message content are required" });
     }
 
     const msg = await chatService.sendMessage(senderId, receiverId, message);
