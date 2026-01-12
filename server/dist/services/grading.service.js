@@ -1,85 +1,67 @@
-"use strict";
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
+// FILE: server/src/services/grading.service.ts
+import prisma from '../utils/prisma';
+
+interface GradeQueryParams {
+  studentId?: string;
+  classId?: string;
+}
+
+export const getGrades = async (params: GradeQueryParams) => {
+  const { studentId, classId } = params;
+
+  const grades = await prisma.grade.findMany({
+    where: {
+      AND: [
+        studentId ? { studentId } : {},
+        classId ? { classId } : {}
+      ]
+    },
+    include: {
+      student: { select: { firstName: true, lastName: true } },
+      class: { select: { name: true } },
+      term: { select: { name: true } }
+    },
+    orderBy: { createdAt: 'desc' }
+  });
+
+  return grades;
 };
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.updateGrade = exports.getGradebook = exports.initTerms = void 0;
-const prisma_1 = __importDefault(require("../utils/prisma"));
-// 1. Initialize Terms (One-time setup helper)
-const initTerms = async () => {
-    const currentYear = await prisma_1.default.academicYear.findFirst({ where: { isCurrent: true } });
-    if (!currentYear)
-        throw new Error("No active Academic Year found.");
-    // Check if terms already exist
-    const existing = await prisma_1.default.term.findMany({ where: { academicYearId: currentYear.id } });
-    if (existing.length > 0)
-        return existing;
-    // Create Q1 to Q4
-    await prisma_1.default.term.createMany({
-        data: [
-            { name: '1st Quarter', academicYearId: currentYear.id, startDate: new Date(), endDate: new Date() },
-            { name: '2nd Quarter', academicYearId: currentYear.id, startDate: new Date(), endDate: new Date() },
-            { name: '3rd Quarter', academicYearId: currentYear.id, startDate: new Date(), endDate: new Date() },
-            { name: '4th Quarter', academicYearId: currentYear.id, startDate: new Date(), endDate: new Date() },
-        ]
-    });
-    return await prisma_1.default.term.findMany({ where: { academicYearId: currentYear.id } });
+
+export const recordGrade = async (data: any) => {
+  // 1. Verify Enrollment
+  const enrollment = await prisma.enrollment.findFirst({
+    where: {
+      studentId: data.studentId,
+      classId: data.classId
+    }
+  });
+
+  if (!enrollment) throw new Error("Student is not enrolled in this class");
+
+  // 2. Upsert Grade
+  // Note: Schema uses @@unique([studentId, classId, termId, subjectId])
+  return await prisma.grade.upsert({
+    where: {
+      studentId_classId_termId_subjectId: {
+        studentId: data.studentId,
+        classId: data.classId,
+        termId: data.termId,
+        subjectId: data.subjectId || "" // Handle optional subjectId if needed or adjust logic
+      }
+    },
+    update: {
+      score: parseFloat(data.score),
+      feedback: data.feedback,
+      gradedById: data.gradedBy
+    },
+    create: {
+      studentId: data.studentId,
+      classId: data.classId,
+      termId: data.termId,
+      subjectId: data.subjectId || "", // Ensure this aligns with your data flow
+      score: parseFloat(data.score),
+      feedback: data.feedback,
+      gradedById: data.gradedBy
+    }
+  });
 };
-exports.initTerms = initTerms;
-// 2. Get Gradebook (The Complex Query)
-const getGradebook = async (classId) => {
-    const id = parseInt(classId);
-    // A. Get the class details (Subject/Section)
-    const classInfo = await prisma_1.default.class.findUnique({
-        where: { id },
-        include: { subject: true, section: true }
-    });
-    if (!classInfo)
-        throw new Error("Class not found");
-    // B. Get all students enrolled in this SECTION
-    const enrollments = await prisma_1.default.enrollment.findMany({
-        where: { sectionId: classInfo.sectionId },
-        include: {
-            student: true // Just fetch the student data
-        },
-        // FIX: We sort the list of enrollments here, based on the student's name
-        orderBy: {
-            student: {
-                lastName: 'asc'
-            }
-        }
-    });
-    // C. Get existing grades for this CLASS
-    const grades = await prisma_1.default.grade.findMany({
-        where: { classId: id }
-    });
-    // D. Get Terms
-    const terms = await prisma_1.default.term.findMany({
-        where: { academicYearId: classInfo.section.academicYearId },
-        orderBy: { name: 'asc' }
-    });
-    return { classInfo, students: enrollments.map(e => e.student), grades, terms };
-};
-exports.getGradebook = getGradebook;
-// 3. Submit/Update a Grade
-const updateGrade = async (data) => {
-    const { studentId, classId, termId, score } = data;
-    // Upsert: Update if exists, Create if new
-    return await prisma_1.default.grade.upsert({
-        where: {
-            studentId_classId_termId: {
-                studentId,
-                classId: parseInt(classId),
-                termId: parseInt(termId)
-            }
-        },
-        update: { score: parseFloat(score) },
-        create: {
-            studentId,
-            classId: parseInt(classId),
-            termId: parseInt(termId),
-            score: parseFloat(score)
-        }
-    });
-};
-exports.updateGrade = updateGrade;

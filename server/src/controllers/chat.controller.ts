@@ -2,43 +2,51 @@
 import { Request, Response } from 'express';
 import * as chatService from '../services/chat.service';
 
-const parseId = (id: string) => parseInt(id);
-
-export const getClassChat = async (req: Request, res: Response) => {
+/**
+ * Get list of available users to chat with
+ */
+export const getContacts = async (req: Request, res: Response) => {
   try {
-    const classId = parseId(req.params.classId);
-    const userId = (req as any).user.userId;
-
-    if (isNaN(classId)) return res.status(400).json({ message: "Invalid Class ID" });
-
-    const conversation = await chatService.getClassConversation(classId, userId);
-    res.json({ success: true, data: conversation });
+    const contacts = await chatService.getContacts(req.user!.id);
+    res.json({ success: true, data: contacts });
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message });
   }
 };
 
-export const sendMessage = async (req: Request, res: Response) => {
-  try {
-    const { conversationId, content } = req.body;
-    const senderId = (req as any).user.userId;
-
-    if (!content || !conversationId) {
-      return res.status(400).json({ message: "Content and Conversation ID required" });
-    }
-
-    const message = await chatService.sendMessage(conversationId, senderId, content);
-    res.status(201).json({ success: true, data: message });
-  } catch (error: any) {
-    res.status(500).json({ success: false, message: error.message });
-  }
-};
-
+/**
+ * Load message history between current user and selected contact
+ */
 export const getHistory = async (req: Request, res: Response) => {
   try {
-    const { conversationId } = req.params;
-    const messages = await chatService.getMessages(conversationId);
-    res.json({ success: true, data: messages });
+    const { userId } = req.params; // The ID of the other person
+    const myId = req.user!.id;
+
+    const history = await chatService.getChatHistory(myId, userId);
+    
+    // Mark these messages as read when history is opened
+    await chatService.markAsRead(myId, userId);
+
+    res.json({ success: true, data: history });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+/**
+ * Send a new real-time message
+ */
+export const sendMessage = async (req: Request, res: Response) => {
+  try {
+    const { receiverId, message } = req.body;
+    const senderId = req.user!.id;
+
+    if (!message || !receiverId) {
+      return res.status(400).json({ success: false, message: "Missing message or receiver" });
+    }
+
+    const msg = await chatService.sendMessage(senderId, receiverId, message);
+    res.json({ success: true, data: msg });
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message });
   }

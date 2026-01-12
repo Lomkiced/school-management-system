@@ -1,133 +1,155 @@
 // FILE: server/prisma/seed.ts
-import { EmploymentStatus, Gender, PrismaClient, UserRole } from '@prisma/client';
+import { Gender, PrismaClient, UserRole } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 
 const prisma = new PrismaClient();
 
 async function main() {
-  console.log('🌱 Starting Enterprise Seeding...');
+  console.log('🌱 Starting Database Seed...');
 
-  // --- PASSWORD HASHING ---
-  // We hash it once and reuse it to ensure consistency
-  const hashedPassword = await bcrypt.hash('password123', 10);
+  // 1. Clean existing data (Order matters to avoid foreign key errors)
+  await prisma.auditLog.deleteMany();
+  await prisma.grade.deleteMany();
+  await prisma.enrollment.deleteMany();
+  await prisma.attendance.deleteMany();
+  await prisma.payment.deleteMany();
+  await prisma.studentFee.deleteMany();
+  await prisma.feeStructure.deleteMany();
+  await prisma.class.deleteMany();
+  await prisma.subject.deleteMany();
+  await prisma.term.deleteMany();
+  await prisma.academicYear.deleteMany();
+  await prisma.student.deleteMany();
+  await prisma.parent.deleteMany();
+  await prisma.teacher.deleteMany();
+  await prisma.admin.deleteMany();
+  await prisma.user.deleteMany();
 
-  // 1. CREATE DEPARTMENTS
-  const scienceDept = await prisma.department.upsert({
-    where: { name: 'Science Department' },
-    update: {},
-    create: {
-      name: 'Science Department',
-      description: 'Physics, Chemistry, and Biology Wing',
-    },
-  });
+  console.log('🧹 Database cleaned.');
 
-  console.log('✅ Departments Synced');
+  // 2. Create Global Password
+  const password = await bcrypt.hash('Admin123', 10);
 
-  // 2. CREATE USERS (With Forced Password Updates)
-
-  // A. SUPER ADMIN
-  await prisma.user.upsert({
-    where: { email: 'admin@school.com' },
-    update: { password: hashedPassword }, // <--- FORCE PASSWORD RESET
-    create: {
+  // 3. Create Admin
+  const adminUser = await prisma.user.create({
+    data: {
       email: 'admin@school.com',
-      password: hashedPassword,
-      role: UserRole.SUPER_ADMIN,
+      password,
+      role: UserRole.ADMIN,
       adminProfile: {
-        create: { firstName: 'Super', lastName: 'Admin' },
-      },
-    },
-  });
-
-  // B. TEACHER
-  const teacherUser = await prisma.user.upsert({
-    where: { email: 'teacher@school.com' },
-    update: { password: hashedPassword }, // <--- FORCE PASSWORD RESET
-    create: {
-      email: 'teacher@school.com',
-      password: hashedPassword,
-      role: UserRole.TEACHER,
-      teacherProfile: {
         create: {
-          firstName: 'Albert',
-          lastName: 'Einstein',
-          phone: '123-456-7890',
-          specialization: 'Physics',
-          status: EmploymentStatus.FULL_TIME,
-          departmentId: scienceDept.id,
-        },
-      },
-    },
+          firstName: 'Super',
+          lastName: 'Admin',
+          phone: '09123456789'
+        }
+      }
+    }
   });
+  console.log('👤 Admin created: admin@school.com');
 
-  // C. PARENT
-  const parentUser = await prisma.user.upsert({
-    where: { email: 'parent@school.com' },
-    // vvv THIS IS THE CRITICAL CHANGE vvv
-    update: { 
-      password: hashedPassword 
-    }, 
-    // ^^^ THIS FORCES THE PASSWORD TO UPDATE ^^^
-    create: {
-      email: 'parent@school.com',
-      password: hashedPassword,
-      role: UserRole.PARENT,
-      parentProfile: {
-        create: {
-          firstName: 'John',
-          lastName: 'Doe',
-          phone: '555-0199',
-          address: '123 Family Lane',
-        },
-      },
-    },
-  });
-  
-  // D. STUDENT
-  // Ensure Parent Profile exists before linking
-  const parentProfile = await prisma.parent.findUnique({ where: { userId: parentUser.id } });
-
-  await prisma.user.upsert({
-    where: { email: 'student@school.com' },
-    update: { password: hashedPassword }, // <--- FORCE PASSWORD RESET
-    create: {
-      email: 'student@school.com',
-      password: hashedPassword,
-      role: UserRole.STUDENT,
-      studentProfile: {
-        create: {
-          firstName: 'Jane',
-          lastName: 'Doe',
-          dateOfBirth: new Date('2010-05-15'),
-          gender: Gender.FEMALE,
-          address: '123 Family Lane',
-          parentId: parentProfile?.id,
-        },
-      },
-    },
-  });
-
-  console.log('✅ Users & Passwords Synced (Password: password123)');
-
-  // 3. ACADEMIC STRUCTURE
-  const currentYear = await prisma.academicYear.upsert({
-    where: { id: 1 },
-    update: {},
-    create: {
+  // 4. Create Academic Year & Terms
+  const academicYear = await prisma.academicYear.create({
+    data: {
       name: '2025-2026',
       startDate: new Date('2025-08-01'),
-      endDate: new Date('2026-06-01'),
+      endDate: new Date('2026-05-30'),
       isCurrent: true,
       terms: {
         create: [
-          { name: 'Fall Semester', startDate: new Date('2025-08-01'), endDate: new Date('2025-12-20') },
-          { name: 'Spring Semester', startDate: new Date('2026-01-05'), endDate: new Date('2026-06-01') },
-        ],
-      },
+          { name: '1st Quarter' },
+          { name: '2nd Quarter' },
+          { name: '3rd Quarter' },
+          { name: '4th Quarter' }
+        ]
+      }
     },
+    include: { terms: true }
+  });
+  console.log('📅 Academic Year set: 2025-2026');
+
+  // 5. Create Teacher
+  const teacherUser = await prisma.user.create({
+    data: {
+      email: 'teacher@school.com',
+      password,
+      role: UserRole.TEACHER,
+      teacherProfile: {
+        create: {
+          firstName: 'John',
+          lastName: 'Doe',
+          phone: '09987654321',
+          address: 'Manila, Philippines'
+        }
+      }
+    },
+    include: { teacherProfile: true }
+  });
+  console.log('👨‍🏫 Teacher created: teacher@school.com');
+
+  // 6. Create Subject
+  const mathSubject = await prisma.subject.create({
+    data: {
+      name: 'Mathematics 10',
+      code: 'MATH10'
+    }
   });
 
-  console.log('🚀 Database Seeding Completed!');
+  // 7. Create Class linked to Teacher & Subject
+  // Note: teacherUser.teacherProfile is not null here because we included it
+  if (teacherUser.teacherProfile) {
+    await prisma.class.create({
+      data: {
+        name: 'Grade 10 - Rizal',
+        teacherId: teacherUser.teacherProfile.id,
+        subjectId: mathSubject.id
+      }
+    });
+    console.log('🏫 Class created: Grade 10 - Rizal');
+  }
+
+  // 8. Create Parent
+  const parentUser = await prisma.user.create({
+    data: {
+      email: 'parent@school.com',
+      password,
+      role: UserRole.PARENT,
+      parentProfile: {
+        create: {
+          firstName: 'Maria',
+          lastName: 'Santos',
+          phone: '09111111111',
+          address: 'Quezon City'
+        }
+      }
+    },
+    include: { parentProfile: true }
+  });
+  console.log('👨‍👩‍👧 Parent created: parent@school.com');
+
+  // 9. Create Student linked to Parent
+  const studentUser = await prisma.user.create({
+    data: {
+      email: 'student@school.com',
+      password,
+      role: UserRole.STUDENT,
+      studentProfile: {
+        create: {
+          firstName: 'Pedro',
+          lastName: 'Santos',
+          gender: Gender.MALE,
+          dateOfBirth: new Date('2010-05-15'),
+          address: 'Quezon City',
+          guardianName: 'Maria Santos',
+          guardianPhone: '09111111111',
+          // Link to parent if parent profile exists
+          parentId: parentUser.parentProfile?.id
+        }
+      }
+    }
+  });
+  console.log('🎓 Student created: student@school.com');
+
+  console.log('✅ Seeding complete!');
 }
 
 main()

@@ -16,7 +16,7 @@ enum UserRole {
   ADMIN
   TEACHER
   STUDENT
-  PARENT       // <--- NEW: Added Parent Role
+  PARENT
 }
 
 enum Gender {
@@ -33,34 +33,19 @@ enum AttendanceStatus {
 }
 
 enum FeeStatus {
-  PENDING
-  PARTIAL
   PAID
-  OVERDUE
+  PARTIAL
+  UNPAID
 }
 
-enum QuestionType {
-  MULTIPLE_CHOICE
-  TRUE_FALSE
-  IDENTIFICATION
+enum PaymentMethod {
+  CASH
+  ONLINE
+  CHECK
+  BANK_TRANSFER
 }
 
-enum ConversationType {
-  DIRECT
-  CLASS_GROUP
-  ANNOUNCEMENT
-}
-
-// === NEW: HR ENUMS ===
-enum EmploymentStatus {
-  FULL_TIME
-  PART_TIME
-  CONTRACT
-  ON_LEAVE
-  TERMINATED
-}
-
-// ================= CORE IDENTITY =================
+// ================= USERS & PROFILES =================
 
 model User {
   id        String   @id @default(uuid())
@@ -69,395 +54,227 @@ model User {
   role      UserRole @default(STUDENT)
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  // === LINKED PROFILES ===
-  studentProfile Student?
-  teacherProfile Teacher?
+  // Profiles
   adminProfile   Admin?
-  parentProfile  Parent?   // <--- NEW: Link to Parent Entity
+  teacherProfile Teacher?
+  studentProfile Student?
+  parentProfile  Parent?
 
-  auditLogs      AuditLog[]
-  
-  // === CHAT RELATIONS ===
-  conversations  ConversationMember[]
-  sentMessages   Message[]
+  // Audits
+  sentChats     Chat[]    @relation("Sender")
+  receivedChats Chat[]    @relation("Receiver")
+  auditLogs     AuditLog[]
 }
 
 model Admin {
   id        String @id @default(uuid())
+  userId    String @unique
+  user      User   @relation(fields: [userId], references: [id], onDelete: Cascade)
   firstName String
   lastName  String
-  userId    String @unique
-  user      User   @relation(fields: [userId], references: [id])
-}
-
-// ================= HR & FACULTY MANAGEMENT (NEW) =================
-
-model Department {
-  id          Int       @id @default(autoincrement())
-  name        String    @unique // e.g., "Science", "Mathematics", "IT"
-  description String?
-  headId      String?   @unique // Link to a Teacher (Head of Dept)
-  teachers    Teacher[] 
-  createdAt   DateTime  @default(now())
+  phone     String?
 }
 
 model Teacher {
-  id               String           @id @default(uuid())
-  firstName        String
-  lastName         String
-  phone            String?
-  address          String?
-  
-  // === PROFESSIONAL DETAILS (NEW) ===
-  specialization   String?          // e.g., "Physics", "React Development"
-  joiningDate      DateTime         @default(now())
-  status           EmploymentStatus @default(FULL_TIME)
-  
-  // === RELATIONS ===
-  departmentId     Int?
-  department       Department?      @relation(fields: [departmentId], references: [id])
-  
-  userId           String           @unique
-  user             User             @relation(fields: [userId], references: [id])
-  classes          Class[]
-}
-
-// ================= STUDENT & FAMILY (REFACTORED) =================
-
-model Parent {
-  id        String    @id @default(uuid())
+  id        String   @id @default(uuid())
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   firstName String
   lastName  String
-  phone     String    @unique // Essential for SMS notifications
+  phone     String?
   address   String?
   
-  userId    String    @unique
-  user      User      @relation(fields: [userId], references: [id])
+  classes   Class[]
+}
+
+model Parent {
+  id        String   @id @default(uuid())
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  firstName String
+  lastName  String
+  phone     String?
+  address   String?
   
-  students  Student[] // One Parent has Many Students
+  students  Student[]
 }
 
 model Student {
-  id            String   @id @default(uuid())
+  id            String    @id @default(uuid())
+  userId        String    @unique
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Profile
   firstName     String
   lastName      String
-  dateOfBirth   DateTime
-  gender        Gender
+  dateOfBirth   DateTime?
+  gender        Gender    @default(MALE)
   address       String?
-  
-  // Legacy fields (kept for safety, but Parent Model is preferred now)
   guardianName  String?
   guardianPhone String?
 
-  // === PARENT RELATION (NEW) ===
+  // Relations
   parentId      String?
-  parent        Parent?  @relation(fields: [parentId], references: [id])
-
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-  admissionDate DateTime @default(now())
-  userId        String   @unique
-  user          User     @relation(fields: [userId], references: [id])
+  parent        Parent?   @relation(fields: [parentId], references: [id])
   
   enrollments   Enrollment[]
-  attendances   Attendance[]
   grades        Grade[]
+  attendance    Attendance[]
   studentFees   StudentFee[]
-  submissions   Submission[]
-  quizAttempts  QuizAttempt[]
 }
 
-// ================= ACADEMIC STRUCTURE =================
+// ================= ACADEMICS =================
 
 model AcademicYear {
-  id        Int      @id @default(autoincrement())
-  name      String
+  id        String   @id @default(uuid())
+  name      String   // e.g., "2025-2026"
+  isCurrent Boolean  @default(false)
   startDate DateTime
   endDate   DateTime
-  isCurrent Boolean  @default(false)
+
   terms     Term[]
-  sections  Section[]
+  fees      FeeStructure[]
 }
 
 model Term {
-  id             Int          @id @default(autoincrement())
-  name           String
-  startDate      DateTime
-  endDate        DateTime
-  academicYearId Int
+  id             String       @id @default(uuid())
+  name           String       // e.g., "1st Quarter"
+  academicYearId String
   academicYear   AcademicYear @relation(fields: [academicYearId], references: [id])
+  
   grades         Grade[]
 }
 
-model GradeLevel {
-  id       Int       @id @default(autoincrement())
-  name     String
-  level    Int
-  sections Section[]
-  subjects Subject[]
-}
-
-// ================= CLASS MANAGEMENT =================
-
 model Subject {
-  id           Int        @id @default(autoincrement())
-  name         String
-  code         String
-  gradeLevelId Int
-  gradeLevel   GradeLevel @relation(fields: [gradeLevelId], references: [id])
-  classes      Class[]
-}
-
-model Section {
-  id             Int          @id @default(autoincrement())
-  name           String
-  gradeLevelId   Int
-  gradeLevel     GradeLevel   @relation(fields: [gradeLevelId], references: [id])
-  academicYearId Int
-  academicYear   AcademicYear @relation(fields: [academicYearId], references: [id])
-  classes        Class[]
-  enrollments    Enrollment[]
+  id          String   @id @default(uuid())
+  name        String
+  code        String   @unique // e.g., "MATH101"
+  description String?
+  
+  classes     Class[]
 }
 
 model Class {
-  id        Int     @id @default(autoincrement())
-  sectionId Int
-  section   Section @relation(fields: [sectionId], references: [id])
-  subjectId Int
-  subject   Subject @relation(fields: [subjectId], references: [id])
-  teacherId String
-  teacher   Teacher @relation(fields: [teacherId], references: [id])
+  id        String   @id @default(uuid())
+  name      String   // e.g., "Grade 10 - Rizal"
+  teacherId String?
+  teacher   Teacher? @relation(fields: [teacherId], references: [id])
+  subjectId String?
+  subject   Subject? @relation(fields: [subjectId], references: [id])
   
+  enrollments Enrollment[]
+  attendance  Attendance[]
   grades      Grade[]
-  attendances Attendance[]
-  materials   SubjectMaterial[]
-  assignments Assignment[]
-  quizzes     Quiz[]
-  
-  // === CHAT RELATION ===
-  conversation Conversation?
 }
 
 model Enrollment {
-  id        Int     @id @default(autoincrement())
+  id        String   @id @default(uuid())
   studentId String
-  student   Student @relation(fields: [studentId], references: [id])
-  sectionId Int
-  section   Section @relation(fields: [sectionId], references: [id])
+  student   Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  classId   String
+  class     Class    @relation(fields: [classId], references: [id], onDelete: Cascade)
+  
   joinedAt  DateTime @default(now())
-  @@unique([studentId, sectionId])
+
+  @@unique([studentId, classId])
 }
 
-// ================= GRADING & ATTENDANCE =================
+// ================= GRADING =================
 
 model Grade {
-  id        Int     @id @default(autoincrement())
+  id        String   @id @default(uuid())
   score     Float
-  remarks   String?
+  feedback  String?
+  
   studentId String
-  student   Student @relation(fields: [studentId], references: [id])
-  classId   Int
-  class     Class   @relation(fields: [classId], references: [id])
-  termId    Int
-  term      Term    @relation(fields: [termId], references: [id])
-  isLocked  Boolean @default(false)
-  @@unique([studentId, classId, termId])
+  student   Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  classId   String
+  class     Class    @relation(fields: [classId], references: [id], onDelete: Cascade)
+  termId    String
+  term      Term     @relation(fields: [termId], references: [id])
+  
+  // Optional: If you grade by subject specifically (usually implied by Class)
+  subjectId String? 
+
+  gradedById String? 
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([studentId, classId, termId, subjectId]) // Prevent duplicate grades
 }
 
 model Attendance {
-  id        Int              @id @default(autoincrement())
+  id        String           @id @default(uuid())
   date      DateTime
   status    AttendanceStatus
+  
   studentId String
   student   Student          @relation(fields: [studentId], references: [id])
-  classId   Int?
-  class     Class?           @relation(fields: [classId], references: [id]) 
-  createdAt DateTime         @default(now())
+  classId   String
+  class     Class            @relation(fields: [classId], references: [id])
 }
 
 // ================= FINANCE =================
 
 model FeeStructure {
-  id          Int     @id @default(autoincrement())
-  name        String
-  amount      Float
-  description String?
-  dueDate     DateTime?
-  studentFees StudentFee[]
+  id             String        @id @default(uuid())
+  name           String        // e.g., "Tuition Fee"
+  amount         Float
+  description    String?
+  dueDate        DateTime?
+  academicYearId String?
+  academicYear   AcademicYear? @relation(fields: [academicYearId], references: [id])
+  
+  studentFees    StudentFee[]
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
 }
 
 model StudentFee {
-  id             Int          @id @default(autoincrement())
+  id             String       @id @default(uuid())
+  status         FeeStatus    @default(UNPAID)
+  
   studentId      String
   student        Student      @relation(fields: [studentId], references: [id])
-  feeStructureId Int
+  feeStructureId String
   feeStructure   FeeStructure @relation(fields: [feeStructureId], references: [id])
-  status         FeeStatus    @default(PENDING)
+  
   payments       Payment[]
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
 }
 
 model Payment {
-  id            Int        @id @default(autoincrement())
-  amount        Float
-  method        String
-  transactionId String?
-  paidAt        DateTime   @default(now())
-  studentFeeId  Int
-  studentFee    StudentFee @relation(fields: [studentFeeId], references: [id])
+  id           String        @id @default(uuid())
+  amount       Float
+  method       PaymentMethod
+  reference    String?       // e.g., Receipt No. or Transaction ID
+  paidAt       DateTime      @default(now())
+  
+  studentFeeId String
+  studentFee   StudentFee    @relation(fields: [studentFeeId], references: [id])
 }
 
-// ================= SECURITY =================
+// ================= COMMUNICATION =================
+
+model Chat {
+  id         String   @id @default(uuid())
+  message    String
+  senderId   String
+  sender     User     @relation("Sender", fields: [senderId], references: [id])
+  receiverId String
+  receiver   User     @relation("Receiver", fields: [receiverId], references: [id])
+  createdAt  DateTime @default(now())
+  isRead     Boolean  @default(false)
+}
 
 model AuditLog {
-  id        Int      @id @default(autoincrement())
+  id        String   @id @default(uuid())
   action    String
-  details   String
-  userId    String
-  user      User     @relation(fields: [userId], references: [id])
+  details   String?
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id])
   createdAt DateTime @default(now())
-}
-
-// ================= LMS (ASSIGNMENTS & MATERIALS) =================
-
-model SubjectMaterial {
-  id          Int      @id @default(autoincrement())
-  title       String
-  description String?
-  fileUrl     String
-  fileType    String
-  classId     Int
-  class       Class    @relation(fields: [classId], references: [id])
-  createdAt   DateTime @default(now())
-}
-
-model Assignment {
-  id          Int      @id @default(autoincrement())
-  title       String
-  description String?
-  dueDate     DateTime
-  maxScore    Float
-  fileUrl     String?
-  fileType    String?
-  classId     Int
-  class       Class    @relation(fields: [classId], references: [id])
-  submissions Submission[]
-  createdAt   DateTime @default(now())
-}
-
-model Submission {
-  id           Int      @id @default(autoincrement())
-  fileUrl      String?
-  content      String?
-  grade        Float?
-  feedback     String?
-  submittedAt  DateTime @default(now())
-  studentId    String
-  student      Student  @relation(fields: [studentId], references: [id])
-  assignmentId Int
-  assignment   Assignment @relation(fields: [assignmentId], references: [id])
-  @@unique([studentId, assignmentId])
-}
-
-// ================= LMS (QUIZZES) =================
-
-model Quiz {
-  id          String   @id @default(uuid())
-  title       String
-  description String?
-  duration    Int      @default(60) 
-  passingScore Float   @default(50.0)
-  isActive    Boolean  @default(false)
-  classId     Int
-  class       Class    @relation(fields: [classId], references: [id])
-  questions   Question[]
-  attempts    QuizAttempt[]
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-}
-
-model Question {
-  id          String       @id @default(uuid())
-  text        String
-  points      Float        @default(1.0)
-  type        QuestionType @default(MULTIPLE_CHOICE)
-  quizId      String
-  quiz        Quiz         @relation(fields: [quizId], references: [id], onDelete: Cascade)
-  options     QuestionOption[]
-  answers     QuizAnswer[]
-}
-
-model QuestionOption {
-  id          String   @id @default(uuid())
-  text        String
-  isCorrect   Boolean  @default(false)
-  questionId  String
-  question    Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
-}
-
-model QuizAttempt {
-  id          String    @id @default(uuid())
-  score       Float?
-  startedAt   DateTime  @default(now())
-  finishedAt  DateTime?
-  studentId   String
-  student     Student   @relation(fields: [studentId], references: [id])
-  quizId      String
-  quiz        Quiz      @relation(fields: [quizId], references: [id])
-  answers     QuizAnswer[]
-}
-
-model QuizAnswer {
-  id               String   @id @default(uuid())
-  textAnswer       String?
-  selectedOptionId String?  
-  attemptId        String
-  attempt          QuizAttempt @relation(fields: [attemptId], references: [id])
-  questionId       String
-  question         Question    @relation(fields: [questionId], references: [id])
-  @@unique([attemptId, questionId])
-}
-
-// ================= CHAT SYSTEM =================
-
-model Conversation {
-  id          String           @id @default(uuid())
-  type        ConversationType @default(DIRECT)
-  name        String?          // Group name (optional for DMs)
-  
-  // If linked to a Class (Contextual Chat)
-  classId     Int?             @unique
-  class       Class?           @relation(fields: [classId], references: [id])
-
-  createdAt   DateTime         @default(now())
-  updatedAt   DateTime         @updatedAt
-  
-  messages    Message[]
-  participants ConversationMember[]
-}
-
-model ConversationMember {
-  id             String       @id @default(uuid())
-  joinedAt       DateTime     @default(now())
-  lastReadAt     DateTime     @default(now()) // For "Unread Messages" count
-  
-  userId         String
-  user           User         @relation(fields: [userId], references: [id])
-  
-  conversationId String
-  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
-
-  @@unique([userId, conversationId]) // User can't be in the same chat twice
-}
-
-model Message {
-  id             String       @id @default(uuid())
-  content        String
-  createdAt      DateTime     @default(now())
-  
-  senderId       String
-  sender         User         @relation(fields: [senderId], references: [id])
-  
-  conversationId String
-  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
 }

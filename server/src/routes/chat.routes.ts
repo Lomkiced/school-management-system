@@ -5,16 +5,15 @@ import { authenticate } from '../middlewares/auth.middleware';
 
 const router = Router();
 
-// Protect all chat routes
 router.use(authenticate);
 
-// Get the chat room for a specific class
-router.get('/class/:classId', chatController.getClassChat);
+// 1. User List / Contacts
+router.get('/contacts', chatController.getContacts);
 
-// Get message history for a specific room
-router.get('/room/:conversationId/messages', chatController.getHistory);
+// 2. Chat History with a specific user
+router.get('/history/:userId', chatController.getHistory);
 
-// Send a message
+// 3. Send a direct message
 router.post('/send', chatController.sendMessage);
 
 export default router;
