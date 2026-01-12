@@ -33,9 +33,10 @@ export const register = async (req: Request, res: Response) => {
 
 export const login = async (req: Request, res: Response) => {
   try {
+    // 1. Validate Input
     const { email, password } = loginSchema.parse(req.body);
     
-    // 1. Get User with all profiles
+    // 2. Find User
     const user = await prisma.user.findUnique({
       where: { email },
       include: { 
@@ -46,53 +47,66 @@ export const login = async (req: Request, res: Response) => {
       }
     });
 
+    // 3. Security Checks
     if (!user) return res.status(401).json({ success: false, message: 'Invalid credentials' });
     if (!user.isActive) return res.status(403).json({ success: false, message: 'Account is deactivated. Contact Admin.' });
 
-    // 2. Validate Password
     const isValid = await bcrypt.compare(password, user.password);
     if (!isValid) return res.status(401).json({ success: false, message: 'Invalid credentials' });
 
-    // 3. Resolve Name based on Role
+    // 4. Determine Display Name
     let name = 'User';
     if (user.role === 'ADMIN' && user.adminProfile) name = `${user.adminProfile.firstName} ${user.adminProfile.lastName}`;
     else if (user.role === 'TEACHER' && user.teacherProfile) name = `${user.teacherProfile.firstName} ${user.teacherProfile.lastName}`;
     else if (user.role === 'STUDENT' && user.studentProfile) name = `${user.studentProfile.firstName} ${user.studentProfile.lastName}`;
     else if (user.role === 'PARENT' && user.parentProfile) name = `${user.parentProfile.firstName} ${user.parentProfile.lastName}`;
 
-    // 4. Issue Token
+    // 5. Issue Token
     const token = jwt.sign(
       { id: user.id, role: user.role, email: user.email },
       JWT_SECRET,
       { expiresIn: '1d' }
     );
 
+    // 6. Send Cookie (THE FIX)
+    // On localhost, secure must be false. In production (https), it must be true.
+    const isProduction = process.env.NODE_ENV === 'production';
+    
     res.cookie('token', token, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
-      maxAge: 24 * 60 * 60 * 1000
+      secure: isProduction, 
+      sameSite: isProduction ? 'none' : 'lax', // 'lax' allows the cookie to travel between localhost ports
+      maxAge: 24 * 60 * 60 * 1000 // 1 day
     });
 
-    // 5. Send Response
+    console.log(`✅ Login Success: ${email} [${user.role}]`);
+
+    // 7. Send Response
     res.json({
       success: true,
       user: {
         id: user.id,
         email: user.email,
-        role: user.role, // Prisma Enums are usually uppercase 'ADMIN', 'STUDENT'
+        role: user.role,
         name: name
       }
     });
 
   } catch (error: any) {
-    console.error("Login Server Error:", error);
-    res.status(500).json({ success: false, message: "Internal server error" });
+    console.error("Login Error:", error);
+    res.status(500).json({ success: false, message: error.message || "Internal server error" });
   }
 };
 
 export const logout = (req: Request, res: Response) => {
-  res.clearCookie('token');
+  const isProduction = process.env.NODE_ENV === 'production';
+  
+  res.clearCookie('token', {
+    httpOnly: true,
+    secure: isProduction,
+    sameSite: isProduction ? 'none' : 'lax'
+  });
+  
   res.json({ success: true, message: 'Logged out successfully' });
 };
 

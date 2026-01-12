@@ -1,54 +1,46 @@
 // FILE: server/src/middlewares/auth.middleware.ts
+import { UserRole } from '@prisma/client'; // <--- Import Enum
 import { NextFunction, Request, Response } from 'express';
 import jwt from 'jsonwebtoken';
-import { JwtPayload } from '../types/express';
+
+const JWT_SECRET = process.env.JWT_SECRET || 'supersecretjwtkey';
+
+// STRICT TYPE DEFINITION
+interface JwtPayload {
+  id: string;
+  role: UserRole; // <--- Changed from 'string' to 'UserRole'
+  email: string;
+}
+
+// Augment Express Request to match
+declare global {
+  namespace Express {
+    interface Request {
+      user?: JwtPayload;
+    }
+  }
+}
 
 export const authenticate = (req: Request, res: Response, next: NextFunction) => {
   try {
-    const authHeader = req.header('Authorization');
-    
-    // 1. Check if header exists
-    if (!authHeader) {
-      return res.status(401).json({ 
-        success: false, 
-        message: 'Access denied. No authorization header provided.' 
-      });
+    // 1. Check Cookie first (Best for Web)
+    let token = req.cookies?.token;
+
+    // 2. Fallback to Header (Best for API/Mobile)
+    if (!token && req.headers.authorization) {
+      token = req.headers.authorization.split(' ')[1];
     }
 
-    // 2. Extract Token
-    const token = authHeader.replace('Bearer ', '');
     if (!token) {
-      return res.status(401).json({ 
-        success: false, 
-        message: 'Access denied. Malformed token.' 
-      });
+      return res.status(401).json({ success: false, message: 'Authentication required' });
     }
 
     // 3. Verify Token
-    const secret = process.env.JWT_SECRET;
-    if (!secret) {
-      console.error("CRITICAL: JWT_SECRET is not defined in environment variables.");
-      return res.status(500).json({ message: "Internal Server Error" });
-    }
-
-    const decoded = jwt.verify(token, secret) as JwtPayload;
-    
-    // 4. Attach to Request (Type-safe now!)
+    const decoded = jwt.verify(token, JWT_SECRET) as JwtPayload;
     req.user = decoded;
     
     next();
   } catch (error) {
-    // 5. Handle specific JWT errors
-    if (error instanceof jwt.TokenExpiredError) {
-      return res.status(401).json({ 
-        success: false, 
-        message: 'Session expired. Please log in again.' 
-      });
-    }
-    
-    return res.status(403).json({ 
-      success: false, 
-      message: 'Invalid token.' 
-    });
+    return res.status(401).json({ success: false, message: 'Invalid or expired token' });
   }
 };
