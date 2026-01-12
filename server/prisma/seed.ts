@@ -1,160 +1,203 @@
 // FILE: server/prisma/seed.ts
-import { Gender, PrismaClient, UserRole } from '@prisma/client';
+import { Gender, PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 
 const prisma = new PrismaClient();
 
 async function main() {
-  console.log('🌱 Starting Database Seed...');
+  console.log('🌱 ARCHITECT SEED: Initializing System Data...');
 
-  // 1. Clean existing data (Order matters to avoid foreign key errors)
-  await prisma.auditLog.deleteMany();
-  await prisma.grade.deleteMany();
-  await prisma.enrollment.deleteMany();
-  await prisma.attendance.deleteMany();
-  await prisma.payment.deleteMany();
-  await prisma.studentFee.deleteMany();
-  await prisma.feeStructure.deleteMany();
-  await prisma.class.deleteMany();
-  await prisma.subject.deleteMany();
-  await prisma.term.deleteMany();
-  await prisma.academicYear.deleteMany();
-  await prisma.student.deleteMany();
-  await prisma.parent.deleteMany();
-  await prisma.teacher.deleteMany();
-  await prisma.admin.deleteMany();
-  await prisma.user.deleteMany();
+  // ================= 1. CLEANUP (Ghostbuster Mode) =================
+  // We delete in a specific order to prevent "Foreign Key" collisions.
+  const deleteOrder = [
+    prisma.auditLog.deleteMany(),
+    prisma.chat.deleteMany(),
+    prisma.payment.deleteMany(),
+    prisma.studentFee.deleteMany(),
+    prisma.feeStructure.deleteMany(),
+    prisma.quizAnswer.deleteMany(),
+    prisma.quizAttempt.deleteMany(),
+    prisma.questionOption.deleteMany(),
+    prisma.question.deleteMany(),
+    prisma.quiz.deleteMany(),
+    prisma.submission.deleteMany(),
+    prisma.assignment.deleteMany(),
+    prisma.subjectMaterial.deleteMany(),
+    prisma.grade.deleteMany(),
+    prisma.attendance.deleteMany(),
+    prisma.enrollment.deleteMany(),
+    prisma.class.deleteMany(),
+    prisma.subject.deleteMany(),
+    prisma.term.deleteMany(),
+    prisma.academicYear.deleteMany(),
+    prisma.student.deleteMany(),
+    prisma.parent.deleteMany(),
+    prisma.teacher.deleteMany(),
+    prisma.admin.deleteMany(),
+    prisma.user.deleteMany(),
+  ];
 
-  console.log('🧹 Database cleaned.');
+  await prisma.$transaction(deleteOrder);
+  console.log('🧹 Database Wiped Clean.');
 
-  // 2. Create Global Password
-  const password = await bcrypt.hash('Admin123', 10);
+  // ================= 2. MASTER SETTINGS =================
+  const salt = await bcrypt.genSalt(10);
+  const password = await bcrypt.hash('password123', salt); // Universal Password
 
-  // 3. Create Admin
-  const adminUser = await prisma.user.create({
-    data: {
-      email: 'admin@school.com',
-      password,
-      role: UserRole.ADMIN,
-      adminProfile: {
-        create: {
-          firstName: 'Super',
-          lastName: 'Admin',
-          phone: '09123456789'
-        }
-      }
-    }
-  });
-  console.log('👤 Admin created: admin@school.com');
-
-  // 4. Create Academic Year & Terms
+  // --- Academic Year & Terms ---
   const academicYear = await prisma.academicYear.create({
     data: {
       name: '2025-2026',
+      isCurrent: true,
       startDate: new Date('2025-08-01'),
       endDate: new Date('2026-05-30'),
-      isCurrent: true,
       terms: {
         create: [
           { name: '1st Quarter' },
           { name: '2nd Quarter' },
           { name: '3rd Quarter' },
-          { name: '4th Quarter' }
-        ]
-      }
+          { name: '4th Quarter' },
+        ],
+      },
     },
-    include: { terms: true }
+    include: { terms: true },
   });
-  console.log('📅 Academic Year set: 2025-2026');
+  const q1Term = academicYear.terms[0];
+  console.log(`📅 Academic Year Set: ${academicYear.name}`);
 
-  // 5. Create Teacher
+  // --- Subjects ---
+  const subjectsData = [
+    { name: 'Mathematics 10', code: 'MATH10' },
+    { name: 'Science 10', code: 'SCI10' },
+    { name: 'English 10', code: 'ENG10' },
+    { name: 'History 10', code: 'HIST10' },
+  ];
+  
+  // Create subjects and store them in a map for easy access
+  const subjects = [];
+  for (const sub of subjectsData) {
+    const created = await prisma.subject.create({ data: sub });
+    subjects.push(created);
+  }
+  console.log(`📚 Subjects Created: ${subjects.length}`);
+
+  // ================= 3. USERS (The Cast) =================
+  
+  // --- Admin ---
+  await prisma.user.create({
+    data: {
+      email: 'admin@school.com',
+      password,
+      role: 'ADMIN',
+      adminProfile: { create: { firstName: 'Super', lastName: 'Admin', phone: '1234567890' } },
+    },
+  });
+
+  // --- Teacher ---
   const teacherUser = await prisma.user.create({
     data: {
       email: 'teacher@school.com',
       password,
-      role: UserRole.TEACHER,
-      teacherProfile: {
-        create: {
-          firstName: 'John',
-          lastName: 'Doe',
-          phone: '09987654321',
-          address: 'Manila, Philippines'
-        }
-      }
+      role: 'TEACHER',
+      teacherProfile: { 
+        create: { 
+          firstName: 'John', 
+          lastName: 'Keating', 
+          phone: '0999999999',
+          address: 'Faculty Room',
+        } 
+      },
     },
-    include: { teacherProfile: true }
+    include: { teacherProfile: true },
   });
-  console.log('👨‍🏫 Teacher created: teacher@school.com');
+  const teacherId = teacherUser.teacherProfile!.id;
 
-  // 6. Create Subject
-  const mathSubject = await prisma.subject.create({
-    data: {
-      name: 'Mathematics 10',
-      code: 'MATH10'
-    }
-  });
-
-  // 7. Create Class linked to Teacher & Subject
-  // Note: teacherUser.teacherProfile is not null here because we included it
-  if (teacherUser.teacherProfile) {
-    await prisma.class.create({
-      data: {
-        name: 'Grade 10 - Rizal',
-        teacherId: teacherUser.teacherProfile.id,
-        subjectId: mathSubject.id
-      }
-    });
-    console.log('🏫 Class created: Grade 10 - Rizal');
-  }
-
-  // 8. Create Parent
+  // --- Parent ---
   const parentUser = await prisma.user.create({
     data: {
       email: 'parent@school.com',
       password,
-      role: UserRole.PARENT,
+      role: 'PARENT',
       parentProfile: {
-        create: {
-          firstName: 'Maria',
-          lastName: 'Santos',
-          phone: '09111111111',
-          address: 'Quezon City'
-        }
-      }
+        create: { firstName: 'Martha', lastName: 'Kent', phone: '0988888888' },
+      },
     },
-    include: { parentProfile: true }
+    include: { parentProfile: true },
   });
-  console.log('👨‍👩‍👧 Parent created: parent@school.com');
+  const parentId = parentUser.parentProfile!.id;
 
-  // 9. Create Student linked to Parent
+  // --- Student ---
   const studentUser = await prisma.user.create({
     data: {
       email: 'student@school.com',
       password,
-      role: UserRole.STUDENT,
+      role: 'STUDENT',
       studentProfile: {
         create: {
-          firstName: 'Pedro',
-          lastName: 'Santos',
+          firstName: 'Clark',
+          lastName: 'Kent',
           gender: Gender.MALE,
-          dateOfBirth: new Date('2010-05-15'),
-          address: 'Quezon City',
-          guardianName: 'Maria Santos',
-          guardianPhone: '09111111111',
-          // Link to parent if parent profile exists
-          parentId: parentUser.parentProfile?.id
-        }
-      }
-    }
+          dateOfBirth: new Date('2010-01-01'),
+          parentId: parentId, // Linking to Parent
+        },
+      },
+    },
+    include: { studentProfile: true },
   });
-  console.log('🎓 Student created: student@school.com');
+  const studentId = studentUser.studentProfile!.id;
+  console.log(`👥 Users Created: Admin, Teacher, Parent, Student`);
 
-  console.log('✅ Seeding complete!');
+  // ================= 4. CLASSES & ENROLLMENT (Connecting the Dots) =================
+  
+  // Create a Class linked to the Teacher and Math Subject
+  const mathClass = await prisma.class.create({
+    data: {
+      name: 'Grade 10 - Rizal',
+      teacherId: teacherId,
+      subjectId: subjects[0].id, // Math
+    },
+  });
+
+  // Enroll the Student
+  await prisma.enrollment.create({
+    data: {
+      studentId: studentId,
+      classId: mathClass.id,
+    },
+  });
+  console.log(`🏫 Class Created & Student Enrolled`);
+
+  // ================= 5. ACADEMIC DATA (Grades & Attendance) =================
+  
+  // Give a Grade
+  await prisma.grade.create({
+    data: {
+      score: 95.5,
+      feedback: 'Excellent work on the final exam.',
+      studentId: studentId,
+      classId: mathClass.id,
+      termId: q1Term.id,
+      gradedById: teacherId,
+    },
+  });
+
+  // Mark Attendance
+  await prisma.attendance.create({
+    data: {
+      date: new Date(),
+      status: 'PRESENT',
+      studentId: studentId,
+      classId: mathClass.id,
+    },
+  });
+  console.log(`📝 Grades & Attendance Recorded`);
+
+  console.log('✅ ARCHITECT SEED COMPLETE: System is populated and ready.');
 }
 
 main()
   .catch((e) => {
-    console.error(e);
+    console.error('❌ SEED FAILURE:', e);
     process.exit(1);
   })
   .finally(async () => {
