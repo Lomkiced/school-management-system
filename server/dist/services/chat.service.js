@@ -4,7 +4,7 @@ import prisma from '../utils/prisma';
 
 /**
  * 1. Get all available contacts for a user
- * Includes profiles to show actual names (Pedro, Maria, etc.)
+ * Includes profile relations to show names (Pedro, Maria, etc.)
  */
 export const getContacts = async (userId: string) => {
   return await prisma.user.findMany({
@@ -86,7 +86,7 @@ export const sendMessage = async (senderId: string, receiverId: string, message:
     }
   });
 
-  // Emit real-time notification via Socket.io
+  // Real-time delivery via Socket.io
   const io = getIO();
   io.to(`user_${receiverId}`).emit('new_message', chatMessage);
 
