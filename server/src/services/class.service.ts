@@ -1,112 +1,378 @@
 // FILE: server/src/services/class.service.ts
 import prisma from '../utils/prisma';
 
-export const getAllClasses = async () => {
+/**
+ * Get all classes with their related data
+ */
+export async function getAllClasses() {
   return await prisma.class.findMany({
     include: {
-      teacher: true,
-      subject: true,
-      section: true,
+      teacher: {
+        select: {
+          id: true,
+          firstName: true,
+          lastName: true,
+          phone: true
+        }
+      },
+      subject: {
+        select: {
+          id: true,
+          name: true,
+          code: true
+        }
+      },
+      enrollments: {
+        include: {
+          student: {
+            select: {
+              id: true,
+              firstName: true,
+              lastName: true
+            }
+          }
+        }
+      },
+      _count: {
+        select: {
+          enrollments: true
+        }
+      }
     },
-    orderBy: { id: 'desc' }
+    orderBy: { name: 'asc' }
   });
-};
+}
 
-export const getClassById = async (id: number) => {
-  // In your Schema, Students enroll in a SECTION, not directly in a Class.
-  // So we fetch the Section's enrollments to see who is in this class.
+/**
+ * Get a single class by ID with all related data
+ */
+export async function getClassById(id: string) {
   return await prisma.class.findUnique({
     where: { id },
     include: {
-      teacher: true,
-      subject: true,
-      section: {
+      teacher: {
+        select: {
+          id: true,
+          firstName: true,
+          lastName: true,
+          phone: true,
+          address: true
+        }
+      },
+      subject: {
+        select: {
+          id: true,
+          name: true,
+          code: true,
+          description: true
+        }
+      },
+      enrollments: {
         include: {
-          // Fetch students via the Section
-          enrollments: {
-            include: {
-              student: true
+          student: {
+            select: {
+              id: true,
+              firstName: true,
+              lastName: true,
+              gender: true,
+              dateOfBirth: true
             }
           }
+        },
+        orderBy: {
+          student: {
+            lastName: 'asc'
+          }
+        }
+      },
+      grades: {
+        include: {
+          student: true,
+          term: true
+        }
+      },
+      attendance: {
+        include: {
+          student: true
+        },
+        orderBy: {
+          date: 'desc'
         }
       }
     }
   });
-};
+}
 
-export const createClass = async (data: any) => {
-  // Removed 'room' and 'schedule' because they don't exist in your database yet.
+/**
+ * Create a new class
+ */
+export async function createClass(data: {
+  name: string;
+  teacherId?: string;
+  subjectId?: string;
+}) {
   return await prisma.class.create({
     data: {
-      teacherId: data.teacherId,
-      subjectId: parseInt(data.subjectId),
-      sectionId: parseInt(data.sectionId),
+      name: data.name,
+      teacherId: data.teacherId || null,
+      subjectId: data.subjectId || null,
     },
     include: {
-      teacher: true,
-      subject: true,
-      section: true
+      teacher: {
+        select: {
+          id: true,
+          firstName: true,
+          lastName: true
+        }
+      },
+      subject: {
+        select: {
+          id: true,
+          name: true,
+          code: true
+        }
+      }
     }
   });
-};
+}
 
-export const updateClass = async (id: number, data: any) => {
+/**
+ * Update an existing class
+ */
+export async function updateClass(id: string, data: {
+  name?: string;
+  teacherId?: string;
+  subjectId?: string;
+}) {
   return await prisma.class.update({
     where: { id },
     data: {
-      teacherId: data.teacherId,
-      subjectId: parseInt(data.subjectId),
-      sectionId: parseInt(data.sectionId),
+      name: data.name,
+      teacherId: data.teacherId || null,
+      subjectId: data.subjectId || null,
     },
     include: {
-      teacher: true,
-      subject: true,
-      section: true
+      teacher: {
+        select: {
+          id: true,
+          firstName: true,
+          lastName: true
+        }
+      },
+      subject: {
+        select: {
+          id: true,
+          name: true,
+          code: true
+        }
+      }
     }
   });
-};
+}
 
-export const enrollStudent = async (classId: number, studentId: string) => {
-  // 1. First, find out which Section this Class belongs to
-  const targetClass = await prisma.class.findUnique({
-    where: { id: classId },
-    select: { sectionId: true }
+/**
+ * Delete a class
+ */
+export async function deleteClass(id: string) {
+  return await prisma.class.delete({
+    where: { id }
+  });
+}
+
+/**
+ * Enroll a student in a class
+ */
+export async function enrollStudent(classId: string, studentId: string) {
+  // Check if class exists
+  const classExists = await prisma.class.findUnique({
+    where: { id: classId }
   });
 
-  if (!targetClass) {
+  if (!classExists) {
     throw new Error("Class not found");
   }
 
-  // 2. Check if student is already enrolled in that SECTION
+  // Check if student exists
+  const studentExists = await prisma.student.findUnique({
+    where: { id: studentId }
+  });
+
+  if (!studentExists) {
+    throw new Error("Student not found");
+  }
+
+  // Check if already enrolled
   const existing = await prisma.enrollment.findUnique({
     where: {
-      studentId_sectionId: {
-        sectionId: targetClass.sectionId,
-        studentId: studentId
+      studentId_classId: {
+        studentId: studentId,
+        classId: classId
       }
     }
   });
 
   if (existing) {
-    throw new Error("Student is already enrolled in this section");
+    throw new Error("Student is already enrolled in this class");
   }
 
-  // 3. Create Enrollment in the SECTION (not the Class)
+  // Create enrollment
   return await prisma.enrollment.create({
     data: {
-      sectionId: targetClass.sectionId,
-      studentId: studentId
+      studentId: studentId,
+      classId: classId
     },
     include: {
-      student: true,
-      section: true
+      student: {
+        select: {
+          id: true,
+          firstName: true,
+          lastName: true,
+          gender: true
+        }
+      },
+      class: {
+        select: {
+          id: true,
+          name: true
+        }
+      }
     }
   });
-};
+}
 
-export const getFormOptions = async () => {
-  const teachers = await prisma.teacher.findMany();
-  const subjects = await prisma.subject.findMany();
-  const sections = await prisma.section.findMany();
-  return { teachers, subjects, sections };
-};
+/**
+ * Remove a student from a class
+ */
+export async function unenrollStudent(classId: string, studentId: string) {
+  const enrollment = await prisma.enrollment.findUnique({
+    where: {
+      studentId_classId: {
+        studentId: studentId,
+        classId: classId
+      }
+    }
+  });
+
+  if (!enrollment) {
+    throw new Error("Student is not enrolled in this class");
+  }
+
+  return await prisma.enrollment.delete({
+    where: {
+      id: enrollment.id
+    }
+  });
+}
+
+/**
+ * Get students enrolled in a specific class
+ */
+export async function getClassStudents(classId: string) {
+  const enrollments = await prisma.enrollment.findMany({
+    where: { classId },
+    include: {
+      student: {
+        select: {
+          id: true,
+          firstName: true,
+          lastName: true,
+          gender: true,
+          dateOfBirth: true,
+          address: true,
+          guardianName: true,
+          guardianPhone: true
+        }
+      }
+    },
+    orderBy: {
+      student: {
+        lastName: 'asc'
+      }
+    }
+  });
+
+  return enrollments.map(e => e.student);
+}
+
+/**
+ * Get form options for creating/updating classes
+ */
+export async function getFormOptions() {
+  const [teachers, subjects] = await Promise.all([
+    prisma.teacher.findMany({
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        phone: true
+      },
+      orderBy: {
+        lastName: 'asc'
+      }
+    }),
+    prisma.subject.findMany({
+      select: {
+        id: true,
+        name: true,
+        code: true,
+        description: true
+      },
+      orderBy: {
+        name: 'asc'
+      }
+    })
+  ]);
+
+  return { teachers, subjects };
+}
+
+/**
+ * Get class statistics
+ */
+export async function getClassStats(classId: string) {
+  const classData = await prisma.class.findUnique({
+    where: { id: classId },
+    include: {
+      _count: {
+        select: {
+          enrollments: true,
+          grades: true,
+          attendance: true
+        }
+      }
+    }
+  });
+
+  if (!classData) {
+    throw new Error("Class not found");
+  }
+
+  // Calculate average grade
+  const grades = await prisma.grade.findMany({
+    where: { classId },
+    select: { score: true }
+  });
+
+  const averageGrade = grades.length > 0
+    ? grades.reduce((sum, g) => sum + g.score, 0) / grades.length
+    : 0;
+
+  // Calculate attendance rate
+  const attendanceRecords = await prisma.attendance.findMany({
+    where: { classId },
+    select: { status: true }
+  });
+
+  const presentCount = attendanceRecords.filter(a => a.status === 'PRESENT').length;
+  const attendanceRate = attendanceRecords.length > 0
+    ? (presentCount / attendanceRecords.length) * 100
+    : 0;
+
+  return {
+    totalStudents: classData._count.enrollments,
+    totalGrades: classData._count.grades,
+    totalAttendance: classData._count.attendance,
+    averageGrade: Number(averageGrade.toFixed(2)),
+    attendanceRate: Number(attendanceRate.toFixed(2))
+  };
+}

@@ -5,144 +5,574 @@ import * as lmsService from '../services/lms.service';
 import prisma from '../utils/prisma';
 import { assignmentSchema, gradeSchema, quizSchema } from '../utils/validation';
 
-const parseId = (id: string, name: string) => {
-  const parsed = parseInt(id);
-  if (isNaN(parsed)) throw new Error(`Invalid ${name} ID`);
-  return parsed;
-};
-
 // ================= ASSIGNMENTS =================
 
-export const createAssignment = async (req: Request, res: Response) => {
+export async function createAssignment(req: Request, res: Response) {
   try {
-    const classId = parseId(req.params.classId, 'Class');
+    const { classId } = req.params;
+
+    // Validate classId format
+    if (!classId || classId.length < 10) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Invalid class ID format' 
+      });
+    }
+
     const validatedData = assignmentSchema.parse(req.body);
     const assignment = await lmsService.createAssignment(classId, validatedData, req.file);
-    res.status(201).json({ success: true, data: assignment });
+    
+    res.status(201).json({ 
+      success: true, 
+      data: assignment,
+      message: 'Assignment created successfully'
+    });
   } catch (error: any) {
-    if (error instanceof ZodError) return res.status(400).json({ success: false, message: error.issues[0].message });
-    res.status(400).json({ success: false, message: error.message });
+    console.error('Create assignment error:', error);
+    
+    if (error instanceof ZodError) {
+      return res.status(400).json({ 
+        success: false, 
+        message: error.issues[0].message 
+      });
+    }
+    
+    res.status(400).json({ 
+      success: false, 
+      message: error.message || 'Failed to create assignment'
+    });
   }
-};
+}
 
-export const getAssignments = async (req: Request, res: Response) => {
+export async function getAssignments(req: Request, res: Response) {
   try {
-    const classId = parseId(req.params.classId, 'Class');
-    const assignments = await lmsService.getClassAssignments(classId, 'all');
-    res.json({ success: true, data: assignments });
+    const { classId } = req.params;
+
+    if (!classId || classId.length < 10) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Invalid class ID format' 
+      });
+    }
+
+    const assignments = await lmsService.getClassAssignments(classId);
+    
+    res.json({ 
+      success: true, 
+      data: assignments,
+      count: assignments.length
+    });
   } catch (error: any) {
-    res.status(400).json({ success: false, message: error.message });
+    console.error('Get assignments error:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: error.message || 'Failed to fetch assignments'
+    });
   }
-};
+}
+
+export async function getAssignmentById(req: Request, res: Response) {
+  try {
+    const { assignmentId } = req.params;
+
+    if (!assignmentId || assignmentId.length < 10) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Invalid assignment ID format' 
+      });
+    }
+
+    const assignment = await lmsService.getAssignmentById(assignmentId);
+    
+    if (!assignment) {
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Assignment not found' 
+      });
+    }
+
+    res.json({ 
+      success: true, 
+      data: assignment 
+    });
+  } catch (error: any) {
+    console.error('Get assignment error:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: error.message || 'Failed to fetch assignment'
+    });
+  }
+}
 
 // ================= SUBMISSIONS =================
 
-export const submitAssignment = async (req: Request, res: Response) => {
+export async function submitAssignment(req: Request, res: Response) {
   try {
-    const { studentId, assignmentId, content } = req.body;
+    const { assignmentId, content } = req.body;
+    let { studentId } = req.body;
     
-    // Fallback: If studentId is missing, try to find it from the User Token
-    let finalStudentId = studentId;
-    
-    // FIX 1: Use req.user.id instead of req.user.userId
-    if (!finalStudentId && req.user) {
-        const student = await prisma.student.findUnique({ where: { userId: req.user.id } });
-        if (student) finalStudentId = student.id;
+    // If studentId not provided, get it from authenticated user
+    if (!studentId && req.user) {
+      const student = await prisma.student.findUnique({ 
+        where: { userId: req.user.id } 
+      });
+      
+      if (student) {
+        studentId = student.id;
+      }
     }
 
-    if (!finalStudentId || !assignmentId) return res.status(400).json({ success: false, message: "Missing fields" });
-    
-    const submission = await lmsService.submitAssignment(finalStudentId, parseInt(assignmentId), req.file, content);
-    res.status(201).json({ success: true, data: submission });
-  } catch (error: any) {
-    res.status(400).json({ success: false, message: error.message });
-  }
-};
+    // Validation
+    if (!studentId) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Student ID is required or you must be logged in as a student' 
+      });
+    }
 
-export const gradeSubmission = async (req: Request, res: Response) => {
-  try {
-    const submissionId = parseId(req.params.submissionId, 'Submission');
-    const validated = gradeSchema.parse(req.body);
-    const result = await lmsService.gradeSubmission(submissionId, validated.grade, validated.feedback || '');
-    res.json({ success: true, data: result });
+    if (!assignmentId || assignmentId.length < 10) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Invalid assignment ID format' 
+      });
+    }
+
+    if (!req.file && !content) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Either file or text content is required' 
+      });
+    }
+
+    const submission = await lmsService.submitAssignment(
+      studentId, 
+      assignmentId, 
+      req.file, 
+      content
+    );
+    
+    res.status(201).json({ 
+      success: true, 
+      data: submission,
+      message: 'Assignment submitted successfully'
+    });
   } catch (error: any) {
-    res.status(400).json({ success: false, message: error.message });
+    console.error('Submit assignment error:', error);
+    res.status(400).json({ 
+      success: false, 
+      message: error.message || 'Failed to submit assignment'
+    });
   }
-};
+}
+
+export async function gradeSubmission(req: Request, res: Response) {
+  try {
+    const { submissionId } = req.params;
+
+    if (!submissionId || submissionId.length < 10) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Invalid submission ID format' 
+      });
+    }
+
+    const validated = gradeSchema.parse(req.body);
+    
+    const result = await lmsService.gradeSubmission(
+      submissionId, 
+      validated.grade, 
+      validated.feedback
+    );
+    
+    res.json({ 
+      success: true, 
+      data: result,
+      message: 'Submission graded successfully'
+    });
+  } catch (error: any) {
+    console.error('Grade submission error:', error);
+    
+    if (error instanceof ZodError) {
+      return res.status(400).json({ 
+        success: false, 
+        message: error.issues[0].message 
+      });
+    }
+    
+    res.status(400).json({ 
+      success: false, 
+      message: error.message || 'Failed to grade submission'
+    });
+  }
+}
+
+export async function getStudentSubmissions(req: Request, res: Response) {
+  try {
+    let { studentId } = req.params;
+
+    // If no studentId in params, get from authenticated user
+    if (!studentId && req.user) {
+      const student = await prisma.student.findUnique({ 
+        where: { userId: req.user.id } 
+      });
+      
+      if (student) {
+        studentId = student.id;
+      }
+    }
+
+    if (!studentId || studentId.length < 10) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Invalid student ID format' 
+      });
+    }
+
+    const submissions = await lmsService.getStudentSubmissions(studentId);
+    
+    res.json({ 
+      success: true, 
+      data: submissions,
+      count: submissions.length
+    });
+  } catch (error: any) {
+    console.error('Get student submissions error:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: error.message || 'Failed to fetch submissions'
+    });
+  }
+}
 
 // ================= MATERIALS =================
 
-export const uploadMaterial = async (req: Request, res: Response) => {
+export async function uploadMaterial(req: Request, res: Response) {
   try {
-    const classId = parseId(req.params.classId, 'Class');
-    if (!req.file || !req.body.title) return res.status(400).json({ success: false, message: 'File and Title required' });
-    const material = await lmsService.uploadMaterial(classId, req.body.title, req.file);
-    res.status(201).json({ success: true, data: material });
-  } catch (error: any) {
-    res.status(400).json({ success: false, message: error.message });
-  }
-};
+    const { classId } = req.params;
+    const { title } = req.body;
 
-export const getMaterials = async (req: Request, res: Response) => {
-  try {
-    const classId = parseId(req.params.classId, 'Class');
-    const materials = await lmsService.getClassMaterials(classId);
-    res.json({ success: true, data: materials });
+    if (!classId || classId.length < 10) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Invalid class ID format' 
+      });
+    }
+
+    if (!req.file) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'File is required' 
+      });
+    }
+
+    if (!title || title.trim().length === 0) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Title is required' 
+      });
+    }
+
+    const material = await lmsService.uploadMaterial(classId, title.trim(), req.file);
+    
+    res.status(201).json({ 
+      success: true, 
+      data: material,
+      message: 'Material uploaded successfully'
+    });
   } catch (error: any) {
-    res.status(400).json({ success: false, message: error.message });
+    console.error('Upload material error:', error);
+    res.status(400).json({ 
+      success: false, 
+      message: error.message || 'Failed to upload material'
+    });
   }
-};
+}
+
+export async function getMaterials(req: Request, res: Response) {
+  try {
+    const { classId } = req.params;
+
+    if (!classId || classId.length < 10) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Invalid class ID format' 
+      });
+    }
+
+    const materials = await lmsService.getClassMaterials(classId);
+    
+    res.json({ 
+      success: true, 
+      data: materials,
+      count: materials.length
+    });
+  } catch (error: any) {
+    console.error('Get materials error:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: error.message || 'Failed to fetch materials'
+    });
+  }
+}
+
+export async function deleteMaterial(req: Request, res: Response) {
+  try {
+    const { materialId } = req.params;
+
+    if (!materialId || materialId.length < 10) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Invalid material ID format' 
+      });
+    }
+
+    await lmsService.deleteMaterial(materialId);
+    
+    res.json({ 
+      success: true, 
+      message: 'Material deleted successfully' 
+    });
+  } catch (error: any) {
+    console.error('Delete material error:', error);
+    res.status(400).json({ 
+      success: false, 
+      message: error.message || 'Failed to delete material'
+    });
+  }
+}
 
 // ================= QUIZZES =================
 
-export const createQuiz = async (req: Request, res: Response) => {
+export async function createQuiz(req: Request, res: Response) {
   try {
-    const classId = parseId(req.params.classId, 'Class');
-    const validatedData = quizSchema.parse(req.body);
-    const quiz = await lmsService.createQuiz(classId, validatedData);
-    res.status(201).json({ success: true, data: quiz });
-  } catch (error: any) {
-    if (error instanceof ZodError) return res.status(400).json({ success: false, message: error.issues[0].message });
-    res.status(400).json({ success: false, message: 'Failed to create quiz' });
-  }
-};
+    const { classId } = req.params;
 
-export const getQuiz = async (req: Request, res: Response) => {
-  try {
-    const quiz = await lmsService.getQuiz(req.params.quizId);
-    if (!quiz) return res.status(404).json({ success: false, message: "Quiz not found" });
-    res.json({ success: true, data: quiz });
-  } catch (error: any) {
-    res.status(400).json({ success: false, message: error.message });
-  }
-};
-
-export const submitQuiz = async (req: Request, res: Response) => {
-  try {
-    const { answers } = req.body;
-    const quizId = req.params.quizId;
-    
-    // FIX 2: Use req.user?.id instead of req.user?.userId
-    const userId = req.user?.id; 
-
-    if (!userId) {
-       return res.status(401).json({ success: false, message: "Unauthorized" });
+    if (!classId || classId.length < 10) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Invalid class ID format' 
+      });
     }
 
-    // 1. Find the Student Profile associated with this User
+    const validatedData = quizSchema.parse(req.body);
+    const quiz = await lmsService.createQuiz(classId, validatedData);
+    
+    res.status(201).json({ 
+      success: true, 
+      data: quiz,
+      message: 'Quiz created successfully'
+    });
+  } catch (error: any) {
+    console.error('Create quiz error:', error);
+    
+    if (error instanceof ZodError) {
+      return res.status(400).json({ 
+        success: false, 
+        message: error.issues[0].message 
+      });
+    }
+    
+    res.status(400).json({ 
+      success: false, 
+      message: error.message || 'Failed to create quiz' 
+    });
+  }
+}
+
+export async function getQuiz(req: Request, res: Response) {
+  try {
+    const { quizId } = req.params;
+
+    if (!quizId || quizId.length < 10) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Invalid quiz ID format' 
+      });
+    }
+
+    const quiz = await lmsService.getQuiz(quizId);
+    
+    if (!quiz) {
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Quiz not found' 
+      });
+    }
+
+    res.json({ 
+      success: true, 
+      data: quiz 
+    });
+  } catch (error: any) {
+    console.error('Get quiz error:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: error.message || 'Failed to fetch quiz'
+    });
+  }
+}
+
+export async function getClassQuizzes(req: Request, res: Response) {
+  try {
+    const { classId } = req.params;
+
+    if (!classId || classId.length < 10) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Invalid class ID format' 
+      });
+    }
+
+    const quizzes = await lmsService.getClassQuizzes(classId);
+    
+    res.json({ 
+      success: true, 
+      data: quizzes,
+      count: quizzes.length
+    });
+  } catch (error: any) {
+    console.error('Get class quizzes error:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: error.message || 'Failed to fetch quizzes'
+    });
+  }
+}
+
+export async function submitQuiz(req: Request, res: Response) {
+  try {
+    const { quizId } = req.params;
+    const { answers } = req.body;
+
+    if (!quizId || quizId.length < 10) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Invalid quiz ID format' 
+      });
+    }
+
+    if (!req.user) {
+      return res.status(401).json({ 
+        success: false, 
+        message: 'Unauthorized' 
+      });
+    }
+
+    // Find student profile
     const student = await prisma.student.findUnique({
-        where: { userId: userId }
+      where: { userId: req.user.id }
     });
 
     if (!student) {
-        return res.status(400).json({ success: false, message: "Student profile not found. Are you logged in as a student?" });
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Student profile not found. Are you logged in as a student?' 
+      });
     }
-    
-    // 2. Submit using the correct Student ID
+
+    if (!Array.isArray(answers) || answers.length === 0) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Answers are required' 
+      });
+    }
+
     const attempt = await lmsService.submitQuiz(student.id, quizId, answers);
-    res.status(201).json({ success: true, data: attempt });
+    
+    res.status(201).json({ 
+      success: true, 
+      data: attempt,
+      message: 'Quiz submitted successfully'
+    });
   } catch (error: any) {
-    console.error("Quiz Submit Error:", error);
-    res.status(400).json({ success: false, message: error.message });
+    console.error('Submit quiz error:', error);
+    res.status(400).json({ 
+      success: false, 
+      message: error.message || 'Failed to submit quiz'
+    });
   }
+}
+
+export async function getQuizAttempts(req: Request, res: Response) {
+  try {
+    const { quizId } = req.params;
+
+    if (!quizId || quizId.length < 10) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Invalid quiz ID format' 
+      });
+    }
+
+    const attempts = await lmsService.getQuizAttempts(quizId);
+    
+    res.json({ 
+      success: true, 
+      data: attempts,
+      count: attempts.length
+    });
+  } catch (error: any) {
+    console.error('Get quiz attempts error:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: error.message || 'Failed to fetch quiz attempts'
+    });
+  }
+}
+
+export async function getStudentQuizAttempts(req: Request, res: Response) {
+  try {
+    let { studentId } = req.params;
+
+    // If no studentId, get from authenticated user
+    if (!studentId && req.user) {
+      const student = await prisma.student.findUnique({ 
+        where: { userId: req.user.id } 
+      });
+      
+      if (student) {
+        studentId = student.id;
+      }
+    }
+
+    if (!studentId || studentId.length < 10) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Invalid student ID format' 
+      });
+    }
+
+    const attempts = await lmsService.getStudentQuizAttempts(studentId);
+    
+    res.json({ 
+      success: true, 
+      data: attempts,
+      count: attempts.length
+    });
+  } catch (error: any) {
+    console.error('Get student quiz attempts error:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: error.message || 'Failed to fetch quiz attempts'
+    });
+  }
+}
+
+// Export as object for easy importing
+export const LMSController = {
+  createAssignment,
+  getAssignments,
+  getAssignmentById,
+  submitAssignment,
+  gradeSubmission,
+  getStudentSubmissions,
+  uploadMaterial,
+  getMaterials,
+  deleteMaterial,
+  createQuiz,
+  getQuiz,
+  getClassQuizzes,
+  submitQuiz,
+  getQuizAttempts,
+  getStudentQuizAttempts
 };

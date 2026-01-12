@@ -1,4 +1,5 @@
 // FILE: server/src/utils/validation.ts
+import { QuestionType } from '@prisma/client';
 import { z } from 'zod';
 
 // ================= AUTH SCHEMAS =================
@@ -24,7 +25,6 @@ export const createStudentSchema = z.object({
   address: z.string().optional(),
   guardianName: z.string().optional(),
   guardianPhone: z.string().optional(),
-  // FIX: Allow password to pass through validation
   password: z.string().min(6, "Password must be at least 6 characters").optional(),
 });
 
@@ -38,7 +38,6 @@ export const createTeacherSchema = z.object({
   phone: z.string().optional(),
   address: z.string().optional(),
   specialization: z.string().optional(),
-  // FIX: Allow password here too
   password: z.string().min(6).optional(),
 });
 
@@ -48,8 +47,11 @@ export const updateTeacherSchema = createTeacherSchema.partial().omit({ email: t
 export const assignmentSchema = z.object({
   title: z.string().min(3, "Title is required"),
   description: z.string().optional(),
-  dueDate: z.string().or(z.date()).transform((val) => new Date(val)),
-  maxScore: z.number().or(z.string().transform(v => parseInt(v))).default(100),
+  dueDate: z.string().min(1, "Due date is required"), // Keep as string for service
+  maxScore: z.union([
+    z.number(),
+    z.string().transform(v => parseFloat(v))
+  ]).default(100),
 });
 
 export const gradeSchema = z.object({
@@ -58,19 +60,53 @@ export const gradeSchema = z.object({
 });
 
 // ================= QUIZ SCHEMAS =================
-const questionSchema = z.object({
-  text: z.string().min(1, "Question text required"),
-  options: z.array(z.string()).min(2, "At least 2 options required"),
-  correctOption: z.number().min(0),
-  points: z.number().default(1)
+const quizQuestionOptionSchema = z.object({
+  text: z.string().min(1, "Option text is required"),
+  isCorrect: z.boolean().default(false)
+});
+
+const quizQuestionSchema = z.object({
+  text: z.string().min(1, "Question text is required"),
+  points: z.number().positive().default(1),
+  type: z.nativeEnum(QuestionType).default(QuestionType.MULTIPLE_CHOICE),
+  options: z.array(quizQuestionOptionSchema).min(2, "At least 2 options required")
 });
 
 export const quizSchema = z.object({
-  title: z.string().min(3, "Quiz title required"),
+  title: z.string().min(3, "Quiz title is required"),
   description: z.string().optional(),
-  questions: z.array(questionSchema).min(1, "At least 1 question required"),
-  timeLimit: z.number().optional() // in minutes
+  duration: z.number().positive("Duration must be positive").default(30), // in minutes
+  passingScore: z.number().min(0).max(100).default(60),
+  questions: z.array(quizQuestionSchema).min(1, "At least 1 question required")
 });
+
+// Alternative schema for simplified quiz creation (converts from old format)
+export const quizSchemaSimplified = z.object({
+  title: z.string().min(3, "Quiz title is required"),
+  description: z.string().optional(),
+  timeLimit: z.number().optional().default(30),
+  questions: z.array(z.object({
+    text: z.string().min(1, "Question text required"),
+    options: z.array(z.string()).min(2, "At least 2 options required"),
+    correctOption: z.number().min(0),
+    points: z.number().default(1),
+    type: z.nativeEnum(QuestionType).optional().default(QuestionType.MULTIPLE_CHOICE)
+  })).min(1, "At least 1 question required")
+}).transform((data) => ({
+  title: data.title,
+  description: data.description,
+  duration: data.timeLimit || 30,
+  passingScore: 60, // Default passing score
+  questions: data.questions.map(q => ({
+    text: q.text,
+    points: q.points,
+    type: q.type || QuestionType.MULTIPLE_CHOICE,
+    options: q.options.map((optText, idx) => ({
+      text: optText,
+      isCorrect: idx === q.correctOption
+    }))
+  }))
+}));
 
 // ================= PARENT SCHEMAS =================
 export const createParentSchema = z.object({
@@ -87,4 +123,52 @@ export const updateParentSchema = createParentSchema.partial().omit({ email: tru
 
 export const linkStudentSchema = z.object({
   studentIds: z.array(z.string()).min(1, "Select at least one student"),
+});
+
+// ================= CLASS SCHEMAS =================
+export const createClassSchema = z.object({
+  name: z.string().min(3, "Class name is required"),
+  teacherId: z.string().optional(),
+  subjectId: z.string().optional(),
+});
+
+export const updateClassSchema = createClassSchema.partial();
+
+// ================= ENROLLMENT SCHEMAS =================
+export const enrollStudentSchema = z.object({
+  studentId: z.string().min(1, "Student ID is required"),
+});
+
+export const bulkEnrollSchema = z.object({
+  classId: z.string().min(1, "Class ID is required"),
+  studentIds: z.array(z.string()).min(1, "At least one student is required"),
+});
+
+// ================= GRADE SCHEMAS =================
+export const createGradeSchema = z.object({
+  studentId: z.string().min(1, "Student ID is required"),
+  classId: z.string().min(1, "Class ID is required"),
+  termId: z.string().min(1, "Term ID is required"),
+  score: z.number().min(0).max(100),
+  feedback: z.string().optional(),
+  subjectId: z.string().optional(),
+});
+
+export const updateGradeSchema = createGradeSchema.partial().omit({ studentId: true, classId: true, termId: true });
+
+// ================= ATTENDANCE SCHEMAS =================
+export const createAttendanceSchema = z.object({
+  studentId: z.string().min(1, "Student ID is required"),
+  classId: z.string().min(1, "Class ID is required"),
+  date: z.string().or(z.date()).transform((val) => new Date(val)),
+  status: z.enum(["PRESENT", "ABSENT", "LATE", "EXCUSED"]),
+});
+
+export const bulkAttendanceSchema = z.object({
+  classId: z.string().min(1, "Class ID is required"),
+  date: z.string().or(z.date()).transform((val) => new Date(val)),
+  attendance: z.array(z.object({
+    studentId: z.string().min(1),
+    status: z.enum(["PRESENT", "ABSENT", "LATE", "EXCUSED"])
+  })).min(1, "At least one attendance record is required")
 });

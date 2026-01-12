@@ -45,6 +45,12 @@ enum PaymentMethod {
   BANK_TRANSFER
 }
 
+enum QuestionType {
+  MULTIPLE_CHOICE
+  TRUE_FALSE
+  IDENTIFICATION
+}
+
 // ================= USERS & PROFILES =================
 
 model User {
@@ -123,6 +129,8 @@ model Student {
   grades        Grade[]
   attendance    Attendance[]
   studentFees   StudentFee[]
+  submissions   Submission[]
+  quizAttempts  QuizAttempt[]
 }
 
 // ================= ACADEMICS =================
@@ -164,9 +172,12 @@ model Class {
   subjectId String?
   subject   Subject? @relation(fields: [subjectId], references: [id])
   
-  enrollments Enrollment[]
-  attendance  Attendance[]
-  grades      Grade[]
+  enrollments      Enrollment[]
+  attendance       Attendance[]
+  grades           Grade[]
+  assignments      Assignment[]
+  subjectMaterials SubjectMaterial[]
+  quizzes          Quiz[]
 }
 
 model Enrollment {
@@ -195,14 +206,13 @@ model Grade {
   termId    String
   term      Term     @relation(fields: [termId], references: [id])
   
-  // Optional: If you grade by subject specifically (usually implied by Class)
   subjectId String? 
 
   gradedById String? 
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
-  @@unique([studentId, classId, termId, subjectId]) // Prevent duplicate grades
+  @@unique([studentId, classId, termId, subjectId])
 }
 
 model Attendance {
@@ -214,6 +224,129 @@ model Attendance {
   student   Student          @relation(fields: [studentId], references: [id])
   classId   String
   class     Class            @relation(fields: [classId], references: [id])
+}
+
+// ================= LMS (LEARNING MANAGEMENT SYSTEM) =================
+
+model Assignment {
+  id          String   @id @default(uuid())
+  title       String
+  description String?
+  dueDate     DateTime
+  maxScore    Float
+  fileUrl     String?
+  fileType    String?
+  
+  classId     String
+  class       Class    @relation(fields: [classId], references: [id], onDelete: Cascade)
+  
+  submissions Submission[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Submission {
+  id           String    @id @default(uuid())
+  studentId    String
+  student      Student   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  assignmentId String
+  assignment   Assignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  
+  fileUrl      String?
+  content      String?   // For text submissions
+  grade        Float?
+  feedback     String?
+  submittedAt  DateTime  @default(now())
+  gradedAt     DateTime?
+  
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@unique([studentId, assignmentId])
+}
+
+model SubjectMaterial {
+  id        String   @id @default(uuid())
+  title     String
+  fileUrl   String
+  fileType  String
+  
+  classId   String
+  class     Class    @relation(fields: [classId], references: [id], onDelete: Cascade)
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Quiz {
+  id           String   @id @default(uuid())
+  title        String
+  description  String?
+  duration     Int      // in minutes
+  passingScore Float
+  
+  classId      String
+  class        Class    @relation(fields: [classId], references: [id], onDelete: Cascade)
+  
+  questions    Question[]
+  attempts     QuizAttempt[]
+  
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model Question {
+  id      String       @id @default(uuid())
+  text    String
+  points  Float
+  type    QuestionType
+  
+  quizId  String
+  quiz    Quiz         @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  
+  options QuestionOption[]
+  answers QuizAnswer[]
+}
+
+model QuestionOption {
+  id         String   @id @default(uuid())
+  text       String
+  isCorrect  Boolean  @default(false)
+  
+  questionId String
+  question   Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  
+  answers    QuizAnswer[]
+}
+
+model QuizAttempt {
+  id         String   @id @default(uuid())
+  studentId  String
+  student    Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  quizId     String
+  quiz       Quiz     @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  
+  score      Float
+  finishedAt DateTime @default(now())
+  
+  answers    QuizAnswer[]
+  createdAt  DateTime @default(now())
+}
+
+model QuizAnswer {
+  id               String  @id @default(uuid())
+  attemptId        String
+  attempt          QuizAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  
+  questionId       String
+  question         Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  
+  selectedOptionId String?
+  selectedOption   QuestionOption? @relation(fields: [selectedOptionId], references: [id])
+  
+  textAnswer       String? // For IDENTIFICATION type questions
+  
+  createdAt        DateTime @default(now())
 }
 
 // ================= FINANCE =================

@@ -1,65 +1,422 @@
+// FILE: server/src/controllers/portal.controller.ts
 import { Request, Response } from 'express';
 import prisma from '../utils/prisma';
 
-export const getMyGrades = async (req: Request, res: Response) => {
+/**
+ * Get grades for the authenticated student
+ */
+export async function getMyGrades(req: Request, res: Response) {
   try {
-    // 1. Get the logged-in User's ID from the Token (req.body.user is set by auth middleware)
-    // Note: In a real app, we'd use a proper middleware to attach 'user' to 'req'. 
-    // For now, we will decode the token manually in the service or trust the middleware we built.
-    // Assuming you have a middleware that puts the decoded token in `req.body.user` or `req.user`
-    
-    // Let's rely on finding the student profile linked to the User ID
-    // We need to pass the userId via the route or middleware.
-    // For this capstone, let's fetch based on the 'userId' stored in the JWT.
-    
-    // FIX: We need to find the Student ID based on the User ID
-    // We assume the auth middleware attaches `user` to the request object. 
-    // Since we haven't strictly typed the middleware yet, we will look up the student by the User ID from the token.
-    
-    // NOTE: If you haven't implemented a middleware that adds `req.user`, 
-    // we need to rely on the token passed in headers.
-    
-    // For simplicity in this step, let's assume the Frontend sends the StudentID or we fetch it.
-    // BETTER APPROACH: Fetch Student by User ID.
-    
-    // We will cheat slightly and pass the 'userId' in the params or body for now, 
-    // OR ideally, extract it from the token. 
-    // Let's use the robust method: Find Student by User ID (which we'll get from the decoded token logic).
-    
-    // For this specific file, let's assume we implement a specific route that uses the User ID.
-    
-    const userId = (req as any).user?.userId; // This comes from the Auth Middleware
+    // Get user ID from authenticated user (set by auth middleware)
+    const userId = req.user?.id;
 
-    if (!userId) return res.status(401).json({ message: "Unauthorized" });
+    if (!userId) {
+      return res.status(401).json({ 
+        success: false, 
+        message: "Unauthorized - Please log in" 
+      });
+    }
 
+    // Find student profile
     const student = await prisma.student.findUnique({
       where: { userId },
       include: {
         grades: {
           include: {
             class: {
-              include: { subject: true, teacher: true }
+              include: { 
+                subject: true, 
+                teacher: true 
+              }
             },
             term: true
+          },
+          orderBy: {
+            createdAt: 'desc'
           }
         }
       }
     });
 
-    if (!student) return res.status(404).json({ message: "Student profile not found" });
+    if (!student) {
+      return res.status(404).json({ 
+        success: false, 
+        message: "Student profile not found" 
+      });
+    }
 
-    // Transform data for the Report Card
+    // Transform data for the report card with null safety
     const reportCard = student.grades.map(g => ({
-      subject: g.class.subject.name,
-      code: g.class.subject.code,
-      teacher: `${g.class.teacher.lastName}, ${g.class.teacher.firstName}`,
+      id: g.id,
+      subject: g.class.subject?.name || 'N/A',
+      code: g.class.subject?.code || 'N/A',
+      className: g.class.name,
+      teacher: g.class.teacher 
+        ? `${g.class.teacher.lastName}, ${g.class.teacher.firstName}`
+        : 'No Teacher Assigned',
       term: g.term.name,
-      score: g.score
+      score: g.score,
+      feedback: g.feedback,
+      gradedAt: g.updatedAt
     }));
 
-    res.json({ success: true, data: reportCard });
+    res.json({ 
+      success: true, 
+      data: reportCard,
+      studentInfo: {
+        name: `${student.firstName} ${student.lastName}`,
+        studentId: student.id
+      }
+    });
 
   } catch (error: any) {
-    res.status(500).json({ success: false, message: error.message });
+    console.error('Get grades error:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: error.message || 'Failed to fetch grades'
+    });
   }
+}
+
+/**
+ * Get student's class schedule
+ */
+export async function getMySchedule(req: Request, res: Response) {
+  try {
+    const userId = req.user?.id;
+
+    if (!userId) {
+      return res.status(401).json({ 
+        success: false, 
+        message: "Unauthorized" 
+      });
+    }
+
+    const student = await prisma.student.findUnique({
+      where: { userId },
+      include: {
+        enrollments: {
+          include: {
+            class: {
+              include: {
+                subject: true,
+                teacher: true
+              }
+            }
+          }
+        }
+      }
+    });
+
+    if (!student) {
+      return res.status(404).json({ 
+        success: false, 
+        message: "Student profile not found" 
+      });
+    }
+
+    const schedule = student.enrollments.map(e => ({
+      classId: e.class.id,
+      className: e.class.name,
+      subject: e.class.subject?.name || 'N/A',
+      subjectCode: e.class.subject?.code || 'N/A',
+      teacher: e.class.teacher
+        ? `${e.class.teacher.firstName} ${e.class.teacher.lastName}`
+        : 'No Teacher Assigned',
+      enrolledAt: e.joinedAt
+    }));
+
+    res.json({ 
+      success: true, 
+      data: schedule 
+    });
+
+  } catch (error: any) {
+    console.error('Get schedule error:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: error.message || 'Failed to fetch schedule'
+    });
+  }
+}
+
+/**
+ * Get student's attendance records
+ */
+export async function getMyAttendance(req: Request, res: Response) {
+  try {
+    const userId = req.user?.id;
+
+    if (!userId) {
+      return res.status(401).json({ 
+        success: false, 
+        message: "Unauthorized" 
+      });
+    }
+
+    const student = await prisma.student.findUnique({
+      where: { userId },
+      select: { id: true }
+    });
+
+    if (!student) {
+      return res.status(404).json({ 
+        success: false, 
+        message: "Student profile not found" 
+      });
+    }
+
+    const attendance = await prisma.attendance.findMany({
+      where: { studentId: student.id },
+      include: {
+        class: {
+          select: {
+            name: true,
+            subject: {
+              select: {
+                name: true,
+                code: true
+              }
+            }
+          }
+        }
+      },
+      orderBy: {
+        date: 'desc'
+      }
+    });
+
+    const attendanceRecords = attendance.map(a => ({
+      id: a.id,
+      date: a.date,
+      status: a.status,
+      className: a.class.name,
+      subject: a.class.subject?.name || 'N/A'
+    }));
+
+    // Calculate attendance statistics
+    const totalRecords = attendance.length;
+    const presentCount = attendance.filter(a => a.status === 'PRESENT').length;
+    const absentCount = attendance.filter(a => a.status === 'ABSENT').length;
+    const lateCount = attendance.filter(a => a.status === 'LATE').length;
+    const excusedCount = attendance.filter(a => a.status === 'EXCUSED').length;
+
+    const attendanceRate = totalRecords > 0 
+      ? ((presentCount / totalRecords) * 100).toFixed(2)
+      : '0.00';
+
+    res.json({ 
+      success: true, 
+      data: attendanceRecords,
+      statistics: {
+        total: totalRecords,
+        present: presentCount,
+        absent: absentCount,
+        late: lateCount,
+        excused: excusedCount,
+        attendanceRate: `${attendanceRate}%`
+      }
+    });
+
+  } catch (error: any) {
+    console.error('Get attendance error:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: error.message || 'Failed to fetch attendance'
+    });
+  }
+}
+
+/**
+ * Get student's assignments
+ */
+export async function getMyAssignments(req: Request, res: Response) {
+  try {
+    const userId = req.user?.id;
+
+    if (!userId) {
+      return res.status(401).json({ 
+        success: false, 
+        message: "Unauthorized" 
+      });
+    }
+
+    // First get student ID
+    const studentProfile = await prisma.student.findUnique({
+      where: { userId },
+      select: { id: true }
+    });
+
+    if (!studentProfile) {
+      return res.status(404).json({ 
+        success: false, 
+        message: "Student profile not found" 
+      });
+    }
+
+    // Then get student with assignments
+    const student = await prisma.student.findUnique({
+      where: { userId },
+      include: {
+        enrollments: {
+          include: {
+            class: {
+              include: {
+                assignments: {
+                  include: {
+                    submissions: {
+                      where: {
+                        studentId: studentProfile.id
+                      }
+                    }
+                  },
+                  orderBy: {
+                    dueDate: 'desc'
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    });
+
+    if (!student) {
+      return res.status(404).json({ 
+        success: false, 
+        message: "Student profile not found" 
+      });
+    }
+
+    // Flatten assignments from all enrolled classes
+    const assignments = student.enrollments.flatMap((enrollment: any) =>
+      enrollment.class.assignments.map((assignment: any) => ({
+        id: assignment.id,
+        title: assignment.title,
+        description: assignment.description,
+        dueDate: assignment.dueDate,
+        maxScore: assignment.maxScore,
+        className: enrollment.class.name,
+        submitted: assignment.submissions.length > 0,
+        submission: assignment.submissions[0] || null,
+        grade: assignment.submissions[0]?.grade || null,
+        feedback: assignment.submissions[0]?.feedback || null
+      }))
+    );
+
+    res.json({ 
+      success: true, 
+      data: assignments 
+    });
+
+  } catch (error: any) {
+    console.error('Get assignments error:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: error.message || 'Failed to fetch assignments'
+    });
+  }
+}
+
+/**
+ * Get student dashboard overview
+ */
+export async function getDashboard(req: Request, res: Response) {
+  try {
+    const userId = req.user?.id;
+
+    if (!userId) {
+      return res.status(401).json({ 
+        success: false, 
+        message: "Unauthorized" 
+      });
+    }
+
+    const student = await prisma.student.findUnique({
+      where: { userId },
+      include: {
+        user: {
+          select: {
+            email: true
+          }
+        },
+        enrollments: {
+          include: {
+            class: true
+          }
+        },
+        grades: true,
+        attendance: {
+          orderBy: {
+            date: 'desc'
+          },
+          take: 10
+        },
+        submissions: {
+          include: {
+            assignment: true
+          },
+          orderBy: {
+            submittedAt: 'desc'
+          },
+          take: 5
+        }
+      }
+    });
+
+    if (!student) {
+      return res.status(404).json({ 
+        success: false, 
+        message: "Student profile not found" 
+      });
+    }
+
+    // Calculate statistics
+    const totalClasses = student.enrollments.length;
+    const totalGrades = student.grades.length;
+    const averageGrade = totalGrades > 0
+      ? (student.grades.reduce((sum, g) => sum + g.score, 0) / totalGrades).toFixed(2)
+      : '0.00';
+
+    const totalAttendance = student.attendance.length;
+    const presentCount = student.attendance.filter(a => a.status === 'PRESENT').length;
+    const attendanceRate = totalAttendance > 0
+      ? ((presentCount / totalAttendance) * 100).toFixed(2)
+      : '0.00';
+
+    res.json({
+      success: true,
+      data: {
+        studentInfo: {
+          name: `${student.firstName} ${student.lastName}`,
+          email: student.user.email,
+          studentId: student.id
+        },
+        statistics: {
+          totalClasses,
+          averageGrade: `${averageGrade}%`,
+          attendanceRate: `${attendanceRate}%`,
+          totalSubmissions: student.submissions.length
+        },
+        recentAttendance: student.attendance,
+        recentSubmissions: student.submissions
+      }
+    });
+
+  } catch (error: any) {
+    console.error('Get dashboard error:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: error.message || 'Failed to fetch dashboard'
+    });
+  }
+}
+
+// Export as object
+export const PortalController = {
+  getMyGrades,
+  getMySchedule,
+  getMyAttendance,
+  getMyAssignments,
+  getDashboard
 };
