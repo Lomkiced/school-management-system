@@ -1,25 +1,29 @@
 // FILE: client/src/store/authStore.ts
+// 2026 Standard: Type-safe auth store with centralized types
 import { create } from 'zustand';
 import api from '../lib/axios';
+import type { User, UserRole } from '../types';
 
-export interface User {
-  id: string;
-  email: string;
-  role: 'ADMIN' | 'TEACHER' | 'STUDENT' | 'PARENT' | 'HR';
-  name: string;
-}
+// Re-export User type for convenience
+export type { User };
 
 interface AuthState {
   user: User | null;
   isAuthenticated: boolean;
   isLoading: boolean;
-  // Upgrade: login now returns the User object or throws
-  login: (credentials: any) => Promise<User>; 
+  /** Login and return user object. Throws on failure. */
+  login: (credentials: { email: string; password: string }) => Promise<User>;
+  /** Logout and clear all auth state */
   logout: () => Promise<void>;
+  /** Initialize auth state from server (check if session is valid) */
   initialize: () => Promise<void>;
+  /** Update user data in store */
+  setUser: (user: User | null) => void;
+  /** Check if user has any of the specified roles */
+  hasRole: (...roles: UserRole[]) => boolean;
 }
 
-export const useAuthStore = create<AuthState>((set) => ({
+export const useAuthStore = create<AuthState>((set, get) => ({
   user: null,
   isAuthenticated: false,
   isLoading: true,
@@ -38,19 +42,14 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
 
   login: async (credentials) => {
-    // 1. Call API
     const { data } = await api.post('/auth/login', credentials);
-    
-    // 2. Validate Response
+
     if (!data.success || !data.user) {
       throw new Error(data.message || 'Login failed: Invalid server response');
     }
 
-    // 3. Update State
-    set({ user: data.user, isAuthenticated: true });
-
-    // 4. Return User (Critical for preventing race conditions in UI)
-    return data.user; 
+    set({ user: data.user, isAuthenticated: true, isLoading: false });
+    return data.user;
   },
 
   logout: async () => {
@@ -62,5 +61,15 @@ export const useAuthStore = create<AuthState>((set) => ({
       set({ user: null, isAuthenticated: false });
       localStorage.clear();
     }
+  },
+
+  setUser: (user) => {
+    set({ user, isAuthenticated: user !== null });
+  },
+
+  hasRole: (...roles) => {
+    const user = get().user;
+    if (!user) return false;
+    return roles.includes(user.role);
   }
 }));

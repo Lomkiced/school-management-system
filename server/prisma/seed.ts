@@ -1,50 +1,37 @@
 // FILE: server/prisma/seed.ts
-import { Gender, PrismaClient } from '@prisma/client';
+import { AttendanceStatus, FeeStatus, Gender, PaymentMethod, PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 
 const prisma = new PrismaClient();
 
 async function main() {
-  console.log('🌱 ARCHITECT SEED: Initializing System Data...');
+  console.log('🏭 ARCHITECT FACTORY: Initializing Production Simulation...');
 
-  // ================= 1. CLEANUP (Ghostbuster Mode) =================
-  // We delete in a specific order to prevent "Foreign Key" collisions.
-  const deleteOrder = [
-    prisma.auditLog.deleteMany(),
-    prisma.chat.deleteMany(),
-    prisma.payment.deleteMany(),
-    prisma.studentFee.deleteMany(),
-    prisma.feeStructure.deleteMany(),
-    prisma.quizAnswer.deleteMany(),
-    prisma.quizAttempt.deleteMany(),
-    prisma.questionOption.deleteMany(),
-    prisma.question.deleteMany(),
-    prisma.quiz.deleteMany(),
-    prisma.submission.deleteMany(),
-    prisma.assignment.deleteMany(),
-    prisma.subjectMaterial.deleteMany(),
-    prisma.grade.deleteMany(),
-    prisma.attendance.deleteMany(),
-    prisma.enrollment.deleteMany(),
-    prisma.class.deleteMany(),
-    prisma.subject.deleteMany(),
-    prisma.term.deleteMany(),
-    prisma.academicYear.deleteMany(),
-    prisma.student.deleteMany(),
-    prisma.parent.deleteMany(),
-    prisma.teacher.deleteMany(),
-    prisma.admin.deleteMany(),
-    prisma.user.deleteMany(),
+  // ================= 1. DEEP CLEAN (Reset System) =================
+  // Deleting in correct order to respect Foreign Keys
+  const tableNames = [
+    'AuditLog', 'Chat', 'Payment', 'StudentFee', 'FeeStructure', 
+    'QuizAnswer', 'QuizAttempt', 'QuestionOption', 'Question', 'Quiz', 
+    'Submission', 'Assignment', 'SubjectMaterial', 'Grade', 'Attendance', 
+    'Enrollment', 'Class', 'Subject', 'Term', 'AcademicYear', 
+    'Student', 'Parent', 'Teacher', 'Admin', 'User'
   ];
 
-  await prisma.$transaction(deleteOrder);
-  console.log('🧹 Database Wiped Clean.');
+  for (const tableName of tableNames) {
+    try {
+      // @ts-ignore
+      await prisma[tableName.charAt(0).toLowerCase() + tableName.slice(1)].deleteMany();
+      console.log(` - Cleared ${tableName}`);
+    } catch (error) {
+      console.log(` ! Note: Could not clear ${tableName} (might be empty or locked)`);
+    }
+  }
 
-  // ================= 2. MASTER SETTINGS =================
+  // ================= 2. GLOBAL SETTINGS =================
   const salt = await bcrypt.genSalt(10);
-  const password = await bcrypt.hash('password123', salt); // Universal Password
+  const password = await bcrypt.hash('password123', salt); // Universal Password for ALL users
 
-  // --- Academic Year & Terms ---
+  // --- Academic Year ---
   const academicYear = await prisma.academicYear.create({
     data: {
       name: '2025-2026',
@@ -62,38 +49,22 @@ async function main() {
     },
     include: { terms: true },
   });
-  const q1Term = academicYear.terms[0];
-  console.log(`📅 Academic Year Set: ${academicYear.name}`);
+  const currentTerm = academicYear.terms[0]; // 1st Quarter
 
-  // --- Subjects ---
-  const subjectsData = [
-    { name: 'Mathematics 10', code: 'MATH10' },
-    { name: 'Science 10', code: 'SCI10' },
-    { name: 'English 10', code: 'ENG10' },
-    { name: 'History 10', code: 'HIST10' },
-  ];
+  // ================= 3. USER ACCOUNTS (The Credentials) =================
   
-  // Create subjects and store them in a map for easy access
-  const subjects = [];
-  for (const sub of subjectsData) {
-    const created = await prisma.subject.create({ data: sub });
-    subjects.push(created);
-  }
-  console.log(`📚 Subjects Created: ${subjects.length}`);
-
-  // ================= 3. USERS (The Cast) =================
-  
-  // --- Admin ---
+  // --- 3.1 SUPER ADMIN ---
   await prisma.user.create({
     data: {
       email: 'admin@school.com',
       password,
       role: 'ADMIN',
-      adminProfile: { create: { firstName: 'Super', lastName: 'Admin', phone: '1234567890' } },
+      adminProfile: { create: { firstName: 'Principal', lastName: 'Skinner', phone: '111-111-1111' } },
     },
   });
+  console.log('👤 Admin Created');
 
-  // --- Teacher ---
+  // --- 3.2 TEACHER ---
   const teacherUser = await prisma.user.create({
     data: {
       email: 'teacher@school.com',
@@ -101,32 +72,34 @@ async function main() {
       role: 'TEACHER',
       teacherProfile: { 
         create: { 
-          firstName: 'John', 
-          lastName: 'Keating', 
-          phone: '0999999999',
-          address: 'Faculty Room',
+          firstName: 'Edna', 
+          lastName: 'Krabappel', 
+          phone: '222-222-2222',
+          address: 'Room 101, Springfield Elementary',
         } 
       },
     },
     include: { teacherProfile: true },
   });
   const teacherId = teacherUser.teacherProfile!.id;
+  console.log('👩‍🏫 Teacher Created');
 
-  // --- Parent ---
+  // --- 3.3 PARENT ---
   const parentUser = await prisma.user.create({
     data: {
       email: 'parent@school.com',
       password,
       role: 'PARENT',
       parentProfile: {
-        create: { firstName: 'Martha', lastName: 'Kent', phone: '0988888888' },
+        create: { firstName: 'Martha', lastName: 'Kent', phone: '333-333-3333', address: 'Smallville Farm' },
       },
     },
     include: { parentProfile: true },
   });
   const parentId = parentUser.parentProfile!.id;
+  console.log('👪 Parent Created');
 
-  // --- Student ---
+  // --- 3.4 STUDENT ---
   const studentUser = await prisma.user.create({
     data: {
       email: 'student@school.com',
@@ -137,67 +110,116 @@ async function main() {
           firstName: 'Clark',
           lastName: 'Kent',
           gender: Gender.MALE,
-          dateOfBirth: new Date('2010-01-01'),
-          parentId: parentId, // Linking to Parent
+          dateOfBirth: new Date('2010-06-18'),
+          address: 'Metropolis',
+          guardianName: 'Martha Kent',
+          guardianPhone: '333-333-3333',
+          parentId: parentId, // Link to Parent
         },
       },
     },
     include: { studentProfile: true },
   });
   const studentId = studentUser.studentProfile!.id;
-  console.log(`👥 Users Created: Admin, Teacher, Parent, Student`);
+  console.log('🎓 Student Created');
 
-  // ================= 4. CLASSES & ENROLLMENT (Connecting the Dots) =================
+  // ================= 4. ACADEMIC STRUCTURE =================
+
+  // --- Subjects ---
+  const subjects = await Promise.all([
+    prisma.subject.create({ data: { name: 'Advanced Mathematics', code: 'MATH101' } }),
+    prisma.subject.create({ data: { name: 'Nuclear Physics', code: 'SCI202' } }),
+    prisma.subject.create({ data: { name: 'World History', code: 'HIST303' } }),
+  ]);
+
+  // --- Classes ---
+  // Create a class for EACH subject and assign the teacher
+  const classes = [];
+  for (const subject of subjects) {
+    const newClass = await prisma.class.create({
+      data: {
+        name: `Grade 10 - ${subject.name}`,
+        teacherId: teacherId,
+        subjectId: subject.id,
+      },
+    });
+    classes.push(newClass);
+  }
+
+  // ================= 5. ENROLLMENT & DATA INJECTION =================
+
+  // Enroll Clark Kent in ALL classes
+  for (const cls of classes) {
+    await prisma.enrollment.create({
+      data: {
+        studentId: studentId,
+        classId: cls.id,
+        joinedAt: new Date(),
+      },
+    });
+
+    // Add some Dummy Grades
+    await prisma.grade.create({
+      data: {
+        studentId: studentId,
+        classId: cls.id,
+        termId: currentTerm.id,
+        subjectId: cls.subjectId, // Explicitly link subject
+        score: Math.floor(Math.random() * (99 - 85) + 85), // Random score between 85-99
+        feedback: 'Excellent performance in class.',
+        gradedById: teacherId,
+      },
+    });
+
+    // Add Attendance
+    await prisma.attendance.create({
+      data: {
+        date: new Date(),
+        status: AttendanceStatus.PRESENT,
+        studentId: studentId,
+        classId: cls.id,
+      },
+    });
+  }
+  console.log(`✅ Student Enrolled in ${classes.length} Classes with Grades & Attendance`);
+
+  // ================= 6. FINANCE (Fees & Payments) =================
   
-  // Create a Class linked to the Teacher and Math Subject
-  const mathClass = await prisma.class.create({
+  const fee = await prisma.feeStructure.create({
     data: {
-      name: 'Grade 10 - Rizal',
-      teacherId: teacherId,
-      subjectId: subjects[0].id, // Math
+      name: 'Annual Tuition Fee',
+      amount: 50000,
+      description: 'Standard tuition for Grade 10',
+      dueDate: new Date('2026-02-01'),
+      academicYearId: academicYear.id,
     },
   });
 
-  // Enroll the Student
-  await prisma.enrollment.create({
+  const studentFee = await prisma.studentFee.create({
     data: {
       studentId: studentId,
-      classId: mathClass.id,
+      feeStructureId: fee.id,
+      status: FeeStatus.PARTIAL,
     },
   });
-  console.log(`🏫 Class Created & Student Enrolled`);
 
-  // ================= 5. ACADEMIC DATA (Grades & Attendance) =================
-  
-  // Give a Grade
-  await prisma.grade.create({
+  await prisma.payment.create({
     data: {
-      score: 95.5,
-      feedback: 'Excellent work on the final exam.',
-      studentId: studentId,
-      classId: mathClass.id,
-      termId: q1Term.id,
-      gradedById: teacherId,
+      amount: 25000,
+      method: PaymentMethod.CASH,
+      reference: 'RCPT-001',
+      studentFeeId: studentFee.id,
+      paidAt: new Date(),
     },
   });
+  console.log('💰 Finance Records Created (Tuition & Partial Payment)');
 
-  // Mark Attendance
-  await prisma.attendance.create({
-    data: {
-      date: new Date(),
-      status: 'PRESENT',
-      studentId: studentId,
-      classId: mathClass.id,
-    },
-  });
-  console.log(`📝 Grades & Attendance Recorded`);
-
-  console.log('✅ ARCHITECT SEED COMPLETE: System is populated and ready.');
+  console.log('🚀 SYSTEM READY. All systems nominal.');
 }
 
 main()
   .catch((e) => {
-    console.error('❌ SEED FAILURE:', e);
+    console.error('❌ SEED ERROR:', e);
     process.exit(1);
   })
   .finally(async () => {

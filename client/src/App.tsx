@@ -1,12 +1,16 @@
 // FILE: client/src/App.tsx
+// 2026 Standard: Role-based routing with protected routes
+
 import { Suspense, lazy, useEffect } from 'react';
 import { Navigate, Route, BrowserRouter as Router, Routes } from 'react-router-dom';
 import { Toaster } from 'sonner';
+import { ProtectedRoute } from './components/auth/ProtectedRoute';
 import { ErrorBoundary } from './components/ui/ErrorBoundary';
 import { useAuthStore } from './store/authStore';
 
+// Dynamic import helper with named export support
 const load = (importPromise: Promise<any>, name?: string) => {
-  return lazy(() => 
+  return lazy(() =>
     importPromise.then(module => {
       if (name && module[name]) return { default: module[name] };
       if (module.default) return { default: module.default };
@@ -15,63 +19,74 @@ const load = (importPromise: Promise<any>, name?: string) => {
   );
 };
 
-// Layouts
+// ================= LAYOUTS =================
 const DashboardLayout = load(import('./components/layout/DashboardLayout'), 'DashboardLayout');
 const StudentLayout = load(import('./components/layout/StudentLayout'), 'StudentLayout');
 const TeacherLayout = load(import('./components/layout/TeacherLayout'), 'TeacherLayout');
 const ParentLayout = load(import('./components/layout/ParentLayout'), 'ParentLayout');
 
-// Auth
+// ================= AUTH =================
 const LoginForm = load(import('./features/auth/LoginForm'), 'LoginForm');
 
-// Dashboards
+// ================= DASHBOARDS =================
 const Dashboard = load(import('./features/dashboard/Dashboard'), 'Dashboard');
 const StudentDashboard = load(import('./features/students/StudentDashboard'), 'StudentDashboard');
 const TeacherDashboard = load(import('./features/teachers/TeacherDashboard'), 'TeacherDashboard');
-// FIX: Points to "parents" (PLURAL)
 const ParentDashboard = load(import('./features/parents/ParentDashboard'), 'ParentDashboard');
 
-// Students
+// ================= STUDENTS =================
 const StudentList = load(import('./features/students/StudentList'), 'StudentList');
 const AddStudent = load(import('./features/students/AddStudent'), 'AddStudent');
 const EnrollStudent = load(import('./features/students/EnrollStudent'), 'EnrollStudent');
 const StudentGrades = load(import('./features/students/StudentGrades'), 'StudentGrades');
 
-// Teachers
+// ================= TEACHERS =================
 const TeacherList = load(import('./features/teachers/TeacherList'), 'TeacherList');
 const AddTeacher = load(import('./features/teachers/AddTeacher'), 'AddTeacher');
 
-// Parents
-// FIX: Points to "parents" (PLURAL)
+// ================= PARENTS =================
 const ParentList = load(import('./features/parents/ParentList'), 'ParentList');
 
-// Classes
+// ================= CLASSES =================
 const ClassList = load(import('./features/classes/ClassList'), 'ClassList');
 const AddClass = load(import('./features/classes/AddClass'), 'AddClass');
 const Gradebook = load(import('./features/classes/Gradebook'), 'Gradebook');
 
-// Finance
+// ================= FINANCE =================
 const FeeList = load(import('./features/finance/FeeList'), 'FeeList');
 const StudentLedger = load(import('./features/finance/StudentLedger'), 'StudentLedger');
 
-// Settings
+// ================= SETTINGS =================
 const Settings = load(import('./features/settings/Settings'), 'Settings');
 
-// LMS
+// ================= LMS =================
 const QuizPlayer = load(import('./features/lms/QuizPlayer'), 'QuizPlayer');
 const QuizBuilder = load(import('./features/lms/QuizBuilder'), 'QuizBuilder');
 
+/**
+ * Loading Screen Component
+ * Shown during lazy-loaded component resolution
+ */
 const LoadingScreen = () => (
   <div className="h-screen w-full flex flex-col items-center justify-center bg-slate-50 gap-4">
-    <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-indigo-600"></div>
-    <p className="text-sm text-slate-500">Loading Application...</p>
+    <div className="relative">
+      <div className="animate-spin rounded-full h-12 w-12 border-4 border-indigo-200" />
+      <div className="animate-spin rounded-full h-12 w-12 border-4 border-indigo-600 border-t-transparent absolute top-0" />
+    </div>
+    <p className="text-sm text-slate-500 animate-pulse">Loading...</p>
   </div>
 );
 
+/**
+ * Main Application Component
+ * Implements role-based routing with protected routes
+ */
 function App() {
   const initialize = useAuthStore((state) => state.initialize);
 
-  useEffect(() => { initialize(); }, [initialize]);
+  useEffect(() => {
+    initialize();
+  }, [initialize]);
 
   return (
     <Router>
@@ -79,53 +94,99 @@ function App() {
         <Toaster position="top-right" richColors closeButton />
         <Suspense fallback={<LoadingScreen />}>
           <Routes>
+            {/* ================= PUBLIC ROUTES ================= */}
             <Route path="/login" element={<LoginForm />} />
+
+            {/* Quiz player - accessible by students */}
             <Route path="/quiz/:quizId" element={<QuizPlayer />} />
 
-            {/* ADMIN */}
-            <Route element={<DashboardLayout />}>
-              <Route path="/dashboard" element={<Dashboard />} />
-              
-              <Route path="/students" element={<StudentList />} />
-              <Route path="/students/new" element={<AddStudent />} />
-              <Route path="/students/enroll" element={<EnrollStudent />} />
-              <Route path="/students/:studentId/ledger" element={<StudentLedger />} />
-              
-              <Route path="/teachers" element={<TeacherList />} />
-              <Route path="/teachers/new" element={<AddTeacher />} />
-              
-              <Route path="/parents" element={<ParentList />} />
+            {/* ================= ADMIN ROUTES ================= */}
+            {/* Protected for ADMIN and SUPER_ADMIN only */}
+            <Route element={<ProtectedRoute allowedRoles={['ADMIN', 'SUPER_ADMIN']} />}>
+              <Route element={<DashboardLayout />}>
+                <Route path="/dashboard" element={<Dashboard />} />
 
-              <Route path="/classes" element={<ClassList />} />
-              <Route path="/classes/new" element={<AddClass />} />
-              <Route path="/classes/:classId/grading" element={<Gradebook />} />
-              
-              <Route path="/finance" element={<FeeList />} />
-              <Route path="/settings" element={<Settings />} />
+                {/* Students Management */}
+                <Route path="/students" element={<StudentList />} />
+                <Route path="/students/new" element={<AddStudent />} />
+                <Route path="/students/enroll" element={<EnrollStudent />} />
+                <Route path="/students/:studentId/ledger" element={<StudentLedger />} />
+
+                {/* Teachers Management */}
+                <Route path="/teachers" element={<TeacherList />} />
+                <Route path="/teachers/new" element={<AddTeacher />} />
+
+                {/* Parents Management */}
+                <Route path="/parents" element={<ParentList />} />
+
+                {/* Classes Management */}
+                <Route path="/classes" element={<ClassList />} />
+                <Route path="/classes/new" element={<AddClass />} />
+                <Route path="/classes/:classId/grading" element={<Gradebook />} />
+
+                {/* Finance */}
+                <Route path="/finance" element={<FeeList />} />
+
+                {/* Settings */}
+                <Route path="/settings" element={<Settings />} />
+              </Route>
             </Route>
 
-            {/* PORTALS */}
-            <Route path="/student" element={<StudentLayout />}>
-              <Route path="dashboard" element={<StudentDashboard />} />
-              <Route path="grades" element={<StudentGrades />} />
+            {/* ================= STUDENT PORTAL ================= */}
+            <Route element={<ProtectedRoute allowedRoles={['STUDENT']} />}>
+              <Route path="/student" element={<StudentLayout />}>
+                <Route path="dashboard" element={<StudentDashboard />} />
+                <Route path="grades" element={<StudentGrades />} />
+              </Route>
             </Route>
 
-            <Route path="/teacher" element={<TeacherLayout />}>
-              <Route path="dashboard" element={<TeacherDashboard />} />
-              <Route path="grading/:classId" element={<Gradebook />} />
-              <Route path="class/:classId/quiz/new" element={<QuizBuilder />} />
+            {/* ================= TEACHER PORTAL ================= */}
+            <Route element={<ProtectedRoute allowedRoles={['TEACHER']} />}>
+              <Route path="/teacher" element={<TeacherLayout />}>
+                <Route path="dashboard" element={<TeacherDashboard />} />
+                <Route path="grading/:classId" element={<Gradebook />} />
+                <Route path="class/:classId/quiz/new" element={<QuizBuilder />} />
+              </Route>
             </Route>
 
-            <Route path="/parent" element={<ParentLayout />}>
-              <Route path="dashboard" element={<ParentDashboard />} />
+            {/* ================= PARENT PORTAL ================= */}
+            <Route element={<ProtectedRoute allowedRoles={['PARENT']} />}>
+              <Route path="/parent" element={<ParentLayout />}>
+                <Route path="dashboard" element={<ParentDashboard />} />
+              </Route>
             </Route>
 
+            {/* ================= FALLBACK ROUTES ================= */}
+            {/* Root redirect */}
             <Route path="/" element={<Navigate to="/login" replace />} />
+
+            {/* 404 - Not Found */}
+            <Route path="*" element={<NotFound />} />
           </Routes>
         </Suspense>
       </ErrorBoundary>
     </Router>
   );
 }
+
+/**
+ * 404 Not Found Page
+ */
+const NotFound = () => {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-slate-50">
+      <div className="text-center">
+        <h1 className="text-6xl font-bold text-slate-300">404</h1>
+        <p className="text-xl text-slate-600 mt-4">Page not found</p>
+        <a
+          href="/login"
+          className="inline-block mt-6 px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition"
+        >
+          Go to Login
+        </a>
+      </div>
+    </div>
+  );
+};
 
 export default App;
