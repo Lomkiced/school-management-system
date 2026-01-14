@@ -1,6 +1,105 @@
 // FILE: server/src/controllers/chat.controller.ts
+// 2026 Standard: Comprehensive chat controller with class-based messaging
+
 import { Request, Response } from 'express';
 import * as chatService from '../services/chat.service';
+
+// ==================== CLASS-BASED CHAT ====================
+
+/**
+ * Get or create a class conversation
+ * Returns class info, enrolled participants, and messages
+ */
+export async function getClassConversation(req: Request, res: Response) {
+  try {
+    const { classId } = req.params;
+    const userId = req.user!.id;
+
+    if (!classId || classId.length < 10) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid class ID'
+      });
+    }
+
+    const conversation = await chatService.getClassConversation(classId, userId);
+
+    res.json({
+      success: true,
+      data: conversation
+    });
+  } catch (error: any) {
+    console.error('Get class conversation error:', error);
+
+    if (error.message.includes('not found')) {
+      return res.status(404).json({
+        success: false,
+        message: error.message
+      });
+    }
+
+    if (error.message.includes('not enrolled') || error.message.includes('not authorized')) {
+      return res.status(403).json({
+        success: false,
+        message: error.message
+      });
+    }
+
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to get class conversation'
+    });
+  }
+}
+
+/**
+ * Send a message to a class conversation
+ */
+export async function sendClassMessage(req: Request, res: Response) {
+  try {
+    const { classId } = req.params;
+    const { content } = req.body;
+    const userId = req.user!.id;
+
+    if (!classId || classId.length < 10) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid class ID'
+      });
+    }
+
+    if (!content || content.trim().length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Message content is required'
+      });
+    }
+
+    const message = await chatService.sendClassMessage(classId, userId, content.trim());
+
+    res.status(201).json({
+      success: true,
+      data: message,
+      message: 'Message sent'
+    });
+  } catch (error: any) {
+    console.error('Send class message error:', error);
+
+    if (error.message.includes('not found')) {
+      return res.status(404).json({
+        success: false,
+        message: error.message
+      });
+    }
+
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to send message'
+    });
+  }
+}
+
+// ==================== DIRECT MESSAGING ====================
 
 /**
  * Get all contacts for the authenticated user
@@ -9,16 +108,16 @@ export async function getContacts(req: Request, res: Response) {
   try {
     const userId = req.user!.id;
     const contacts = await chatService.getContacts(userId);
-    
-    res.json({ 
-      success: true, 
+
+    res.json({
+      success: true,
       data: contacts,
       count: contacts.length
     });
   } catch (error: any) {
     console.error('Get contacts error:', error);
-    res.status(500).json({ 
-      success: false, 
+    res.status(500).json({
+      success: false,
       message: error.message || 'Failed to fetch contacts'
     });
   }
@@ -32,105 +131,56 @@ export async function getHistory(req: Request, res: Response) {
     const { userId } = req.params;
     const myId = req.user!.id;
 
-    // Validation
     if (!userId || userId.length < 10) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Invalid user ID' 
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid user ID'
       });
     }
 
-    if (userId === myId) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Cannot chat with yourself' 
-      });
-    }
-
-    // Fetch history
     const history = await chatService.getChatHistory(myId, userId);
-    
-    // Mark messages as read
     await chatService.markAsRead(myId, userId);
 
-    res.json({ 
-      success: true, 
+    res.json({
+      success: true,
       data: history,
       count: history.length
     });
   } catch (error: any) {
     console.error('Get history error:', error);
-    res.status(500).json({ 
-      success: false, 
+    res.status(500).json({
+      success: false,
       message: error.message || 'Failed to fetch chat history'
     });
   }
 }
 
 /**
- * Send a message to another user
+ * Send a direct message to another user
  */
 export async function sendMessage(req: Request, res: Response) {
   try {
     const { receiverId, message } = req.body;
     const senderId = req.user!.id;
 
-    // Validation
-    if (!receiverId) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Receiver ID is required' 
+    if (!receiverId || !message || message.trim().length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Receiver ID and message are required'
       });
     }
 
-    if (!message || message.trim().length === 0) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Message content is required' 
-      });
-    }
-
-    if (receiverId === senderId) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Cannot send message to yourself' 
-      });
-    }
-
-    if (message.length > 5000) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Message is too long (max 5000 characters)' 
-      });
-    }
-
-    // Send message
     const msg = await chatService.sendMessage(senderId, receiverId, message);
 
-    res.status(201).json({ 
-      success: true, 
+    res.status(201).json({
+      success: true,
       data: msg,
       message: 'Message sent successfully'
     });
   } catch (error: any) {
     console.error('Send message error:', error);
-    
-    if (error.message.includes('not found')) {
-      return res.status(404).json({ 
-        success: false, 
-        message: error.message 
-      });
-    }
-
-    if (error.message.includes('inactive')) {
-      return res.status(403).json({ 
-        success: false, 
-        message: error.message 
-      });
-    }
-
-    res.status(500).json({ 
-      success: false, 
+    res.status(500).json({
+      success: false,
       message: error.message || 'Failed to send message'
     });
   }
@@ -143,37 +193,16 @@ export async function getUnreadCount(req: Request, res: Response) {
   try {
     const userId = req.user!.id;
     const count = await chatService.getUnreadCount(userId);
-    
-    res.json({ 
-      success: true, 
+
+    res.json({
+      success: true,
       data: { count }
     });
   } catch (error: any) {
     console.error('Get unread count error:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: error.message || 'Failed to get unread count'
-    });
-  }
-}
-
-/**
- * Get unread messages grouped by sender
- */
-export async function getUnreadMessages(req: Request, res: Response) {
-  try {
-    const userId = req.user!.id;
-    const messages = await chatService.getUnreadMessagesBySender(userId);
-    
-    res.json({ 
-      success: true, 
-      data: messages
-    });
-  } catch (error: any) {
-    console.error('Get unread messages error:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: error.message || 'Failed to get unread messages'
+    res.status(500).json({
+      success: false,
+      message: 'Failed to get unread count'
     });
   }
 }
@@ -186,24 +215,17 @@ export async function markMessagesAsRead(req: Request, res: Response) {
     const { senderId } = req.params;
     const userId = req.user!.id;
 
-    if (!senderId || senderId.length < 10) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Invalid sender ID' 
-      });
-    }
-
     await chatService.markAsRead(userId, senderId);
-    
-    res.json({ 
-      success: true, 
+
+    res.json({
+      success: true,
       message: 'Messages marked as read'
     });
   } catch (error: any) {
     console.error('Mark as read error:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: error.message || 'Failed to mark messages as read'
+    res.status(500).json({
+      success: false,
+      message: 'Failed to mark messages as read'
     });
   }
 }
@@ -216,50 +238,29 @@ export async function deleteMessage(req: Request, res: Response) {
     const { messageId } = req.params;
     const userId = req.user!.id;
 
-    if (!messageId || messageId.length < 10) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Invalid message ID' 
-      });
-    }
-
     await chatService.deleteMessage(messageId, userId);
-    
-    res.json({ 
-      success: true, 
-      message: 'Message deleted successfully'
+
+    res.json({
+      success: true,
+      message: 'Message deleted'
     });
   } catch (error: any) {
     console.error('Delete message error:', error);
-    
-    if (error.message.includes('not found')) {
-      return res.status(404).json({ 
-        success: false, 
-        message: error.message 
-      });
-    }
-
-    if (error.message.includes('only delete your own')) {
-      return res.status(403).json({ 
-        success: false, 
-        message: error.message 
-      });
-    }
-
-    res.status(500).json({ 
-      success: false, 
+    res.status(500).json({
+      success: false,
       message: error.message || 'Failed to delete message'
     });
   }
 }
 
-// Export as both individual functions and as an object
+// Export as object for convenience
 export const ChatController = {
+  getClassConversation,
+  sendClassMessage,
   getContacts,
   getHistory,
   sendMessage,
   getUnreadCount,
-  getUnreadMessages,
   markMessagesAsRead,
   deleteMessage
 };

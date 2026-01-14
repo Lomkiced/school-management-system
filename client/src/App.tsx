@@ -43,6 +43,8 @@ const StudentGrades = load(import('./features/students/StudentGrades'), 'Student
 // ================= TEACHERS =================
 const TeacherList = load(import('./features/teachers/TeacherList'), 'TeacherList');
 const AddTeacher = load(import('./features/teachers/AddTeacher'), 'AddTeacher');
+const TeacherClasses = load(import('./features/teachers/TeacherClasses'), 'TeacherClasses');
+const TeacherGradebook = load(import('./features/teachers/TeacherGradebook'), 'TeacherGradebook');
 
 // ================= PARENTS =================
 const ParentList = load(import('./features/parents/ParentList'), 'ParentList');
@@ -62,6 +64,10 @@ const Settings = load(import('./features/settings/Settings'), 'Settings');
 // ================= LMS =================
 const QuizPlayer = load(import('./features/lms/QuizPlayer'), 'QuizPlayer');
 const QuizBuilder = load(import('./features/lms/QuizBuilder'), 'QuizBuilder');
+
+// ================= STUDENT LMS =================
+const StudentClasses = load(import('./features/students/StudentClasses'), 'StudentClasses');
+const StudentClassDetail = load(import('./features/students/StudentClassDetail'), 'StudentClassDetail');
 
 /**
  * Loading Screen Component
@@ -137,6 +143,8 @@ function App() {
               <Route path="/student" element={<StudentLayout />}>
                 <Route path="dashboard" element={<StudentDashboard />} />
                 <Route path="grades" element={<StudentGrades />} />
+                <Route path="classes" element={<StudentClasses />} />
+                <Route path="class/:classId" element={<StudentClassDetail />} />
               </Route>
             </Route>
 
@@ -144,6 +152,8 @@ function App() {
             <Route element={<ProtectedRoute allowedRoles={['TEACHER']} />}>
               <Route path="/teacher" element={<TeacherLayout />}>
                 <Route path="dashboard" element={<TeacherDashboard />} />
+                <Route path="classes" element={<TeacherClasses />} />
+                <Route path="grades" element={<TeacherGradebook />} />
                 <Route path="grading/:classId" element={<Gradebook />} />
                 <Route path="class/:classId/quiz/new" element={<QuizBuilder />} />
               </Route>

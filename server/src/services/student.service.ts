@@ -13,13 +13,13 @@ interface StudentQueryParams {
 
 // --- Read Operations ---
 
-export async function getAllStudents({ 
-  page = 1, 
-  limit = 10, 
-  search = '', 
-  status = 'ACTIVE' 
+export async function getAllStudents({
+  page = 1,
+  limit = 10,
+  search = '',
+  status = 'ACTIVE'
 }: StudentQueryParams) {
-  
+
   const skip = (page - 1) * limit;
 
   // Build Dynamic Filter
@@ -44,14 +44,14 @@ export async function getAllStudents({
       take: limit,
       skip: skip,
       include: {
-        user: { 
-          select: { 
-            email: true, 
-            isActive: true 
-          } 
+        user: {
+          select: {
+            email: true,
+            isActive: true
+          }
         },
         enrollments: {
-          include: { 
+          include: {
             class: {
               select: {
                 id: true,
@@ -93,16 +93,16 @@ export async function getAllStudents({
 export async function getStudentById(id: string) {
   return await prisma.student.findUnique({
     where: { id },
-    include: { 
-      user: { 
-        select: { 
-          email: true, 
+    include: {
+      user: {
+        select: {
+          email: true,
           isActive: true,
           role: true
-        } 
+        }
       },
-      enrollments: { 
-        include: { 
+      enrollments: {
+        include: {
           class: {
             include: {
               subject: true,
@@ -142,8 +142,8 @@ export async function getStudentById(id: string) {
         },
         take: 10
       },
-      studentFees: { 
-        include: { 
+      studentFees: {
+        include: {
           feeStructure: true,
           payments: true
         },
@@ -172,23 +172,71 @@ export async function getStudentById(id: string) {
 // --- Write Operations ---
 
 export async function createStudent(data: any) {
-  // Check if email already exists
+  // Check if student email already exists
   const existingUser = await prisma.user.findUnique({
     where: { email: data.email }
   });
-  
+
   if (existingUser) {
-    throw new Error('Email already in use');
+    throw new Error('Student email already in use');
   }
 
   // Use provided password or fallback
-  const passwordToHash = data.password || 'Student123';
-  const hashedPassword = await bcrypt.hash(passwordToHash, 10);
+  const studentPassword = data.password || 'Student123';
+  const hashedStudentPassword = await bcrypt.hash(studentPassword, 10);
 
+  // Check if we need to create or link parent
+  let parentId: string | null = null;
+
+  if (data.createParent && data.parentEmail) {
+    // Check if parent with this email already exists
+    const existingParent = await prisma.user.findUnique({
+      where: { email: data.parentEmail },
+      include: { parentProfile: true }
+    });
+
+    if (existingParent) {
+      // Parent exists - link to them (sibling scenario)
+      if (existingParent.parentProfile) {
+        parentId = existingParent.parentProfile.id;
+      } else {
+        throw new Error('This email belongs to a non-parent account');
+      }
+    } else {
+      // Create new parent account
+      const parentPassword = data.parentPassword || 'Parent123';
+      const hashedParentPassword = await bcrypt.hash(parentPassword, 10);
+
+      const newParentUser = await prisma.user.create({
+        data: {
+          email: data.parentEmail,
+          password: hashedParentPassword,
+          role: UserRole.PARENT,
+          isActive: true,
+          parentProfile: {
+            create: {
+              firstName: data.parentFirstName || data.guardianName?.split(' ')[0] || 'Parent',
+              lastName: data.parentLastName || data.guardianName?.split(' ').slice(1).join(' ') || data.lastName,
+              phone: data.guardianPhone || null,
+              address: data.address || null
+            }
+          }
+        },
+        include: { parentProfile: true }
+      });
+
+      parentId = newParentUser.parentProfile!.id;
+    }
+  } else if (data.existingParentId) {
+    // Link to an explicitly selected existing parent
+    parentId = data.existingParentId;
+  }
+
+  // Create student with optional parent link
   return await prisma.user.create({
     data: {
       email: data.email,
-      password: hashedPassword,
+      password: hashedStudentPassword,
       role: UserRole.STUDENT,
       studentProfile: {
         create: {
@@ -198,12 +246,21 @@ export async function createStudent(data: any) {
           gender: data.gender as Gender,
           address: data.address || null,
           guardianName: data.guardianName || null,
-          guardianPhone: data.guardianPhone || null
+          guardianPhone: data.guardianPhone || null,
+          parentId: parentId
         }
       }
     },
-    include: { 
-      studentProfile: true 
+    include: {
+      studentProfile: {
+        include: {
+          parent: {
+            include: {
+              user: { select: { email: true } }
+            }
+          }
+        }
+      }
     }
   });
 }
@@ -242,16 +299,16 @@ export async function updateStudent(id: string, data: any) {
 
 // === TOGGLE STATUS (Soft Delete) ===
 export async function toggleStudentStatus(id: string) {
-  const student = await prisma.student.findUnique({ 
+  const student = await prisma.student.findUnique({
     where: { id },
-    select: { 
-      userId: true, 
-      user: { 
-        select: { 
-          isActive: true 
-        } 
-      } 
-    } 
+    select: {
+      userId: true,
+      user: {
+        select: {
+          isActive: true
+        }
+      }
+    }
   });
 
   if (!student) {
@@ -266,12 +323,12 @@ export async function toggleStudentStatus(id: string) {
 
 // === PERMANENT DELETE (Hard Delete) ===
 export async function deleteStudentPermanently(id: string) {
-  const student = await prisma.student.findUnique({ 
+  const student = await prisma.student.findUnique({
     where: { id },
-    select: { 
-      id: true, 
-      userId: true 
-    } 
+    select: {
+      id: true,
+      userId: true
+    }
   });
 
   if (!student) {
@@ -281,59 +338,59 @@ export async function deleteStudentPermanently(id: string) {
   // TRANSACTION: Delete everything in correct order
   return await prisma.$transaction([
     // 1. Delete Quiz Attempts and Answers
-    prisma.quizAnswer.deleteMany({ 
-      where: { 
-        attempt: { 
-          studentId: id 
-        } 
-      } 
+    prisma.quizAnswer.deleteMany({
+      where: {
+        attempt: {
+          studentId: id
+        }
+      }
     }),
-    prisma.quizAttempt.deleteMany({ 
-      where: { studentId: id } 
+    prisma.quizAttempt.deleteMany({
+      where: { studentId: id }
     }),
-    
+
     // 2. Delete Submissions
-    prisma.submission.deleteMany({ 
-      where: { studentId: id } 
+    prisma.submission.deleteMany({
+      where: { studentId: id }
     }),
-    
+
     // 3. Delete Grades
-    prisma.grade.deleteMany({ 
-      where: { studentId: id } 
+    prisma.grade.deleteMany({
+      where: { studentId: id }
     }),
-    
+
     // 4. Delete Attendance Records
-    prisma.attendance.deleteMany({ 
-      where: { studentId: id } 
+    prisma.attendance.deleteMany({
+      where: { studentId: id }
     }),
-    
+
     // 5. Delete Enrollments
-    prisma.enrollment.deleteMany({ 
-      where: { studentId: id } 
+    prisma.enrollment.deleteMany({
+      where: { studentId: id }
     }),
-    
+
     // 6. Delete Payments first (foreign key to StudentFee)
-    prisma.payment.deleteMany({ 
-      where: { 
-        studentFee: { 
-          studentId: id 
-        } 
-      } 
+    prisma.payment.deleteMany({
+      where: {
+        studentFee: {
+          studentId: id
+        }
+      }
     }),
-    
+
     // 7. Delete Student Fees
-    prisma.studentFee.deleteMany({ 
-      where: { studentId: id } 
+    prisma.studentFee.deleteMany({
+      where: { studentId: id }
     }),
 
     // 8. Delete the Student Profile
-    prisma.student.delete({ 
-      where: { id } 
+    prisma.student.delete({
+      where: { id }
     }),
 
     // 9. Finally, Delete the User Account
-    prisma.user.delete({ 
-      where: { id: student.userId } 
+    prisma.user.delete({
+      where: { id: student.userId }
     })
   ]);
 }

@@ -1,150 +1,193 @@
 "use strict";
+var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
+    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
+    return new (P || (P = Promise))(function (resolve, reject) {
+        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
+        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
+        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
+        step((generator = generator.apply(thisArg, _arguments || [])).next());
+    });
+};
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getContacts = getContacts;
-exports.getChatHistory = getChatHistory;
-exports.markAsRead = markAsRead;
-exports.sendMessage = sendMessage;
-exports.getUnreadCount = getUnreadCount;
-exports.getUnreadMessagesBySender = getUnreadMessagesBySender;
-exports.deleteMessage = deleteMessage;
-// FILE: server/src/services/chat.service.ts
+exports.deleteMessage = exports.getUnreadMessagesBySender = exports.getUnreadCount = exports.sendMessage = exports.markAsRead = exports.getChatHistory = exports.getContacts = exports.sendClassMessage = exports.getClassConversation = void 0;
 const socket_1 = require("../lib/socket");
 const prisma_1 = __importDefault(require("../utils/prisma"));
-/**
- * Chat Service
- * Handles all chat-related operations
- */
-/**
- * Get all available contacts for a user
- * Returns all active users except the current user
- */
-async function getContacts(userId) {
-    try {
-        const contacts = await prisma_1.default.user.findMany({
-            where: {
-                id: { not: userId },
-                isActive: true
+
+// In-memory storage for class messages
+const classMessages = new Map();
+
+// Class-based chat
+function getClassConversation(classId, userId) {
+    return __awaiter(this, void 0, void 0, function* () {
+        var _a, _b;
+        const classInfo = yield prisma_1.default.class.findUnique({
+            where: { id: classId },
+            include: {
+                teacher: { select: { id: true, firstName: true, lastName: true, userId: true } },
+                subject: { select: { name: true, code: true } },
+                enrollments: {
+                    include: {
+                        student: { select: { id: true, firstName: true, lastName: true, userId: true } }
+                    }
+                }
+            }
+        });
+        if (!classInfo) {
+            throw new Error('Class not found');
+        }
+        const isTeacher = ((_a = classInfo.teacher) === null || _a === void 0 ? void 0 : _a.userId) === userId;
+        const isEnrolled = classInfo.enrollments.some(e => e.student.userId === userId);
+        const user = yield prisma_1.default.user.findUnique({
+            where: { id: userId },
+            select: { role: true }
+        });
+        const isAdmin = (user === null || user === void 0 ? void 0 : user.role) === 'ADMIN' || (user === null || user === void 0 ? void 0 : user.role) === 'SUPER_ADMIN';
+        if (!isTeacher && !isEnrolled && !isAdmin) {
+            throw new Error('You are not authorized to view this class conversation');
+        }
+        const messages = classMessages.get(classId) || [];
+        return {
+            id: classId,
+            classInfo: {
+                id: classInfo.id,
+                name: classInfo.name,
+                teacher: classInfo.teacher,
+                subject: classInfo.subject
             },
+            participants: [
+                ...(classInfo.teacher ? [Object.assign(Object.assign({}, classInfo.teacher), { role: 'TEACHER' })] : []),
+                ...classInfo.enrollments.map(e => (Object.assign(Object.assign({}, e.student), { role: 'STUDENT' })))
+            ],
+            messages
+        };
+    });
+}
+exports.getClassConversation = getClassConversation;
+
+function sendClassMessage(classId, userId, content) {
+    return __awaiter(this, void 0, void 0, function* () {
+        var _a;
+        const classInfo = yield prisma_1.default.class.findUnique({
+            where: { id: classId },
+            include: {
+                teacher: { select: { userId: true } },
+                enrollments: { include: { student: { select: { userId: true } } } }
+            }
+        });
+        if (!classInfo) {
+            throw new Error('Class not found');
+        }
+        const isTeacher = ((_a = classInfo.teacher) === null || _a === void 0 ? void 0 : _a.userId) === userId;
+        const isEnrolled = classInfo.enrollments.some(e => e.student.userId === userId);
+        const user = yield prisma_1.default.user.findUnique({
+            where: { id: userId },
+            select: { role: true }
+        });
+        const isAdmin = (user === null || user === void 0 ? void 0 : user.role) === 'ADMIN' || (user === null || user === void 0 ? void 0 : user.role) === 'SUPER_ADMIN';
+        if (!isTeacher && !isEnrolled && !isAdmin) {
+            throw new Error('You are not authorized to send messages to this class');
+        }
+        const sender = yield prisma_1.default.user.findUnique({
+            where: { id: userId },
+            select: {
+                id: true,
+                role: true,
+                teacherProfile: { select: { firstName: true, lastName: true } },
+                studentProfile: { select: { firstName: true, lastName: true } },
+                adminProfile: { select: { firstName: true, lastName: true } }
+            }
+        });
+        const senderName = (sender === null || sender === void 0 ? void 0 : sender.teacherProfile) || (sender === null || sender === void 0 ? void 0 : sender.studentProfile) || (sender === null || sender === void 0 ? void 0 : sender.adminProfile) || { firstName: 'Unknown', lastName: 'User' };
+        const message = {
+            id: `msg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+            classId,
+            senderId: userId,
+            sender: {
+                id: userId,
+                role: sender === null || sender === void 0 ? void 0 : sender.role,
+                firstName: senderName.firstName,
+                lastName: senderName.lastName
+            },
+            content,
+            createdAt: new Date().toISOString()
+        };
+        if (!classMessages.has(classId)) {
+            classMessages.set(classId, []);
+        }
+        classMessages.get(classId).push(message);
+        const messages = classMessages.get(classId);
+        if (messages.length > 100) {
+            classMessages.set(classId, messages.slice(-100));
+        }
+        try {
+            const io = (0, socket_1.getIO)();
+            io.to(`class_${classId}`).emit('class_message', message);
+        }
+        catch (socketError) {
+            console.error('Socket.io emission failed:', socketError);
+        }
+        return message;
+    });
+}
+exports.sendClassMessage = sendClassMessage;
+
+// Direct messaging
+function getContacts(userId) {
+    return __awaiter(this, void 0, void 0, function* () {
+        const contacts = yield prisma_1.default.user.findMany({
+            where: { id: { not: userId }, isActive: true },
             select: {
                 id: true,
                 email: true,
                 role: true,
-                adminProfile: {
-                    select: {
-                        firstName: true,
-                        lastName: true
-                    }
-                },
-                teacherProfile: {
-                    select: {
-                        firstName: true,
-                        lastName: true
-                    }
-                },
-                studentProfile: {
-                    select: {
-                        firstName: true,
-                        lastName: true
-                    }
-                },
-                parentProfile: {
-                    select: {
-                        firstName: true,
-                        lastName: true
-                    }
-                }
+                adminProfile: { select: { firstName: true, lastName: true } },
+                teacherProfile: { select: { firstName: true, lastName: true } },
+                studentProfile: { select: { firstName: true, lastName: true } },
+                parentProfile: { select: { firstName: true, lastName: true } }
             },
-            orderBy: {
-                email: 'asc'
-            }
+            orderBy: { email: 'asc' }
         });
         return contacts;
-    }
-    catch (error) {
-        console.error('Error fetching contacts:', error);
-        throw new Error('Failed to fetch contacts');
-    }
+    });
 }
-/**
- * Get message history between two users
- * Returns messages sorted by creation date (oldest first)
- */
-async function getChatHistory(userId, otherUserId) {
-    try {
-        const messages = await prisma_1.default.chat.findMany({
+exports.getContacts = getContacts;
+
+function getChatHistory(userId, otherUserId) {
+    return __awaiter(this, void 0, void 0, function* () {
+        const messages = yield prisma_1.default.chat.findMany({
             where: {
                 OR: [
                     { senderId: userId, receiverId: otherUserId },
                     { senderId: otherUserId, receiverId: userId }
                 ]
             },
-            orderBy: {
-                createdAt: 'asc'
-            },
+            orderBy: { createdAt: 'asc' },
             include: {
-                sender: {
-                    select: {
-                        id: true,
-                        email: true,
-                        role: true
-                    }
-                },
-                receiver: {
-                    select: {
-                        id: true,
-                        email: true,
-                        role: true
-                    }
-                }
+                sender: { select: { id: true, email: true, role: true } },
+                receiver: { select: { id: true, email: true, role: true } }
             }
         });
         return messages;
-    }
-    catch (error) {
-        console.error('Error fetching chat history:', error);
-        throw new Error('Failed to fetch chat history');
-    }
+    });
 }
-/**
- * Mark all messages from a specific sender as read
- */
-async function markAsRead(userId, senderId) {
-    try {
-        const result = await prisma_1.default.chat.updateMany({
-            where: {
-                receiverId: userId,
-                senderId: senderId,
-                isRead: false
-            },
-            data: {
-                isRead: true
-            }
+exports.getChatHistory = getChatHistory;
+
+function markAsRead(userId, senderId) {
+    return __awaiter(this, void 0, void 0, function* () {
+        return yield prisma_1.default.chat.updateMany({
+            where: { receiverId: userId, senderId: senderId, isRead: false },
+            data: { isRead: true }
         });
-        return result;
-    }
-    catch (error) {
-        console.error('Error marking messages as read:', error);
-        throw new Error('Failed to mark messages as read');
-    }
+    });
 }
-/**
- * Send a direct message to another user
- * Emits real-time notification via Socket.io
- */
-async function sendMessage(senderId, receiverId, message) {
-    try {
-        // Validate inputs
-        if (!senderId || !receiverId || !message) {
-            throw new Error('Sender, receiver, and message are required');
-        }
-        if (message.trim().length === 0) {
-            throw new Error('Message cannot be empty');
-        }
-        // Check if receiver exists and is active
-        const receiver = await prisma_1.default.user.findUnique({
+exports.markAsRead = markAsRead;
+
+function sendMessage(senderId, receiverId, message) {
+    return __awaiter(this, void 0, void 0, function* () {
+        const receiver = yield prisma_1.default.user.findUnique({
             where: { id: receiverId },
             select: { isActive: true }
         });
@@ -154,164 +197,69 @@ async function sendMessage(senderId, receiverId, message) {
         if (!receiver.isActive) {
             throw new Error('Receiver account is inactive');
         }
-        // Create the message
-        const chatMessage = await prisma_1.default.chat.create({
-            data: {
-                senderId,
-                receiverId,
-                message: message.trim(),
-                isRead: false
-            },
+        const chatMessage = yield prisma_1.default.chat.create({
+            data: { senderId, receiverId, message: message.trim(), isRead: false },
             include: {
-                sender: {
-                    select: {
-                        id: true,
-                        email: true,
-                        role: true,
-                        adminProfile: {
-                            select: {
-                                firstName: true,
-                                lastName: true
-                            }
-                        },
-                        teacherProfile: {
-                            select: {
-                                firstName: true,
-                                lastName: true
-                            }
-                        },
-                        studentProfile: {
-                            select: {
-                                firstName: true,
-                                lastName: true
-                            }
-                        },
-                        parentProfile: {
-                            select: {
-                                firstName: true,
-                                lastName: true
-                            }
-                        }
-                    }
-                },
-                receiver: {
-                    select: {
-                        id: true,
-                        email: true,
-                        role: true
-                    }
-                }
+                sender: { select: { id: true, email: true, role: true } },
+                receiver: { select: { id: true, email: true, role: true } }
             }
         });
-        // Real-time delivery via Socket.io
         try {
             const io = (0, socket_1.getIO)();
             io.to(`user_${receiverId}`).emit('new_message', chatMessage);
         }
         catch (socketError) {
             console.error('Socket.io emission failed:', socketError);
-            // Don't throw - message is saved, socket failure is not critical
         }
         return chatMessage;
-    }
-    catch (error) {
-        console.error('Error sending message:', error);
-        throw error;
-    }
+    });
 }
-/**
- * Get unread message count for a user
- */
-async function getUnreadCount(userId) {
-    try {
-        const count = await prisma_1.default.chat.count({
-            where: {
-                receiverId: userId,
-                isRead: false
-            }
+exports.sendMessage = sendMessage;
+
+function getUnreadCount(userId) {
+    return __awaiter(this, void 0, void 0, function* () {
+        return yield prisma_1.default.chat.count({
+            where: { receiverId: userId, isRead: false }
         });
-        return count;
-    }
-    catch (error) {
-        console.error('Error getting unread count:', error);
-        throw new Error('Failed to get unread message count');
-    }
+    });
 }
-/**
- * Get unread messages grouped by sender
- */
-async function getUnreadMessagesBySender(userId) {
-    try {
-        const unreadMessages = await prisma_1.default.chat.findMany({
-            where: {
-                receiverId: userId,
-                isRead: false
-            },
+exports.getUnreadCount = getUnreadCount;
+
+function getUnreadMessagesBySender(userId) {
+    return __awaiter(this, void 0, void 0, function* () {
+        const unreadMessages = yield prisma_1.default.chat.findMany({
+            where: { receiverId: userId, isRead: false },
             include: {
                 sender: {
                     select: {
                         id: true,
                         email: true,
                         role: true,
-                        adminProfile: {
-                            select: {
-                                firstName: true,
-                                lastName: true
-                            }
-                        },
-                        teacherProfile: {
-                            select: {
-                                firstName: true,
-                                lastName: true
-                            }
-                        },
-                        studentProfile: {
-                            select: {
-                                firstName: true,
-                                lastName: true
-                            }
-                        },
-                        parentProfile: {
-                            select: {
-                                firstName: true,
-                                lastName: true
-                            }
-                        }
+                        adminProfile: { select: { firstName: true, lastName: true } },
+                        teacherProfile: { select: { firstName: true, lastName: true } },
+                        studentProfile: { select: { firstName: true, lastName: true } },
+                        parentProfile: { select: { firstName: true, lastName: true } }
                     }
                 }
             },
-            orderBy: {
-                createdAt: 'desc'
-            }
+            orderBy: { createdAt: 'desc' }
         });
-        // Group by sender
         const grouped = unreadMessages.reduce((acc, msg) => {
             const senderId = msg.senderId;
             if (!acc[senderId]) {
-                acc[senderId] = {
-                    sender: msg.sender,
-                    count: 0,
-                    lastMessage: msg
-                };
+                acc[senderId] = { sender: msg.sender, count: 0, lastMessage: msg };
             }
             acc[senderId].count++;
             return acc;
         }, {});
         return Object.values(grouped);
-    }
-    catch (error) {
-        console.error('Error getting unread messages by sender:', error);
-        throw new Error('Failed to get unread messages');
-    }
+    });
 }
-/**
- * Delete a message (soft delete by marking as deleted)
- * Note: You may need to add a 'deletedAt' field to your schema for this
- */
-async function deleteMessage(messageId, userId) {
-    try {
-        // Verify the user owns this message
-        const message = await prisma_1.default.chat.findUnique({
+exports.getUnreadMessagesBySender = getUnreadMessagesBySender;
+
+function deleteMessage(messageId, userId) {
+    return __awaiter(this, void 0, void 0, function* () {
+        const message = yield prisma_1.default.chat.findUnique({
             where: { id: messageId },
             select: { senderId: true }
         });
@@ -321,14 +269,7 @@ async function deleteMessage(messageId, userId) {
         if (message.senderId !== userId) {
             throw new Error('You can only delete your own messages');
         }
-        // Delete the message
-        const deleted = await prisma_1.default.chat.delete({
-            where: { id: messageId }
-        });
-        return deleted;
-    }
-    catch (error) {
-        console.error('Error deleting message:', error);
-        throw error;
-    }
+        return yield prisma_1.default.chat.delete({ where: { id: messageId } });
+    });
 }
+exports.deleteMessage = deleteMessage;

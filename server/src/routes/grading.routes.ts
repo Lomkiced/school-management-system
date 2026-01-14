@@ -1,4 +1,6 @@
 // FILE: server/src/routes/grading.routes.ts
+// 2026 Standard: Comprehensive grading routes with role-based access
+
 import { Router } from 'express';
 import * as gradingController from '../controllers/grading.controller';
 import { authenticate } from '../middlewares/auth.middleware';
@@ -8,10 +10,34 @@ const router = Router();
 
 router.use(authenticate);
 
-// 1. Get Grades (Teachers see class, Students see own)
-router.get('/', restrictTo('ADMIN', 'TEACHER', 'STUDENT', 'PARENT'), gradingController.getGrades);
+/**
+ * GET /api/grading/:classId
+ * Get complete gradebook for a class (class info, students, terms, grades)
+ * Access: Teachers, Admins
+ */
+router.get('/:classId',
+    restrictTo('SUPER_ADMIN', 'ADMIN', 'TEACHER'),
+    gradingController.getGradebook
+);
 
-// 2. Submit/Update Grades (Teachers Only)
-router.post('/', restrictTo('TEACHER', 'ADMIN'), gradingController.submitGrade);
+/**
+ * GET /api/grading
+ * Get grades with optional filters (for student portal, etc.)
+ * Access: All authenticated users
+ */
+router.get('/',
+    restrictTo('SUPER_ADMIN', 'ADMIN', 'TEACHER', 'STUDENT', 'PARENT'),
+    gradingController.getGrades
+);
+
+/**
+ * POST /api/grading
+ * Submit or update a grade
+ * Access: Teachers, Admins
+ */
+router.post('/',
+    restrictTo('SUPER_ADMIN', 'ADMIN', 'TEACHER'),
+    gradingController.submitGrade
+);
 
 export default router;
