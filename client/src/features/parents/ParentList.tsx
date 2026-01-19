@@ -1,10 +1,11 @@
 // FILE: client/src/features/parents/ParentList.tsx
 import {
-    Phone,
-    Plus,
-    Search,
-    Trash2,
-    Users
+  Edit,
+  Phone,
+  Plus,
+  Search,
+  Trash2,
+  Users
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
@@ -16,16 +17,18 @@ import { Skeleton } from '../../components/ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../../components/ui/table';
 import api from '../../lib/axios';
 import { AddParentModal } from './AddParentModal';
+import { EditParentModal } from './EditParentModal';
 import { LinkChildrenModal } from './LinkChildrenModal';
 
 export const ParentList = () => {
   const [parents, setParents] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
-  
+
   // Modal States
   const [showAddModal, setShowAddModal] = useState(false);
-  const [linkingParent, setLinkingParent] = useState<{id: string, name: string} | null>(null);
+  const [linkingParent, setLinkingParent] = useState<{ id: string, name: string } | null>(null);
+  const [editingParent, setEditingParent] = useState<any | null>(null);
 
   const fetchParents = async () => {
     try {
@@ -47,19 +50,19 @@ export const ParentList = () => {
   }, [searchTerm]);
 
   const handleDelete = async (id: string) => {
-    if(!window.confirm("Delete this parent? Their children will NOT be deleted, just unlinked.")) return;
+    if (!window.confirm("Delete this parent? Their children will NOT be deleted, just unlinked.")) return;
     try {
       await api.delete(`/parents/${id}`);
       setParents(prev => prev.filter(p => p.id !== id));
       toast.success("Parent deleted");
-    } catch(err) {
+    } catch (err) {
       toast.error("Delete failed");
     }
   };
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
-      
+
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
@@ -75,8 +78,8 @@ export const ParentList = () => {
       <div className="bg-white p-4 rounded-lg border border-slate-200 flex gap-4 shadow-sm">
         <div className="relative flex-1 max-w-sm">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-          <Input 
-            placeholder="Search name, email or phone..." 
+          <Input
+            placeholder="Search name, email or phone..."
             className="pl-9 border-slate-200"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
@@ -142,8 +145,8 @@ export const ParentList = () => {
                         ) : (
                           <span className="text-slate-400 text-xs italic">No children linked</span>
                         )}
-                        <button 
-                          onClick={() => setLinkingParent({id: parent.id, name: `${parent.firstName} ${parent.lastName}`})}
+                        <button
+                          onClick={() => setLinkingParent({ id: parent.id, name: `${parent.firstName} ${parent.lastName}` })}
                           className="opacity-0 group-hover:opacity-100 transition-opacity bg-white hover:bg-slate-100 text-slate-500 border border-slate-200 rounded-full p-1 shadow-sm"
                           title="Link Child"
                         >
@@ -153,18 +156,27 @@ export const ParentList = () => {
                     </TableCell>
                     <TableCell className="text-right pr-6">
                       <div className="flex justify-end gap-1">
-                        <Button 
-                          variant="ghost" 
-                          size="sm" 
+                        <Button
+                          variant="ghost"
+                          size="sm"
                           className="h-8 w-8 p-0 text-indigo-600 hover:bg-indigo-50"
-                          onClick={() => setLinkingParent({id: parent.id, name: `${parent.firstName} ${parent.lastName}`})}
+                          onClick={() => setEditingParent(parent)}
+                          title="Edit Details"
+                        >
+                          <Edit size={16} />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-8 w-8 p-0 text-emerald-600 hover:bg-emerald-50"
+                          onClick={() => setLinkingParent({ id: parent.id, name: `${parent.firstName} ${parent.lastName}` })}
                           title="Manage Family"
                         >
                           <Users size={16} />
                         </Button>
-                        <Button 
-                          variant="ghost" 
-                          size="sm" 
+                        <Button
+                          variant="ghost"
+                          size="sm"
                           className="h-8 w-8 p-0 text-red-400 hover:text-red-600 hover:bg-red-50"
                           onClick={() => handleDelete(parent.id)}
                         >
@@ -182,18 +194,26 @@ export const ParentList = () => {
 
       {/* Modals */}
       {showAddModal && (
-        <AddParentModal 
-          onClose={() => setShowAddModal(false)} 
-          onSuccess={() => { setShowAddModal(false); fetchParents(); }} 
+        <AddParentModal
+          onClose={() => setShowAddModal(false)}
+          onSuccess={() => { setShowAddModal(false); fetchParents(); }}
         />
       )}
 
       {linkingParent && (
-        <LinkChildrenModal 
+        <LinkChildrenModal
           parentId={linkingParent.id}
           parentName={linkingParent.name}
           onClose={() => setLinkingParent(null)}
           onSuccess={() => { setLinkingParent(null); fetchParents(); }}
+        />
+      )}
+
+      {editingParent && (
+        <EditParentModal
+          parent={editingParent}
+          onClose={() => setEditingParent(null)}
+          onSuccess={() => fetchParents()}
         />
       )}
     </div>

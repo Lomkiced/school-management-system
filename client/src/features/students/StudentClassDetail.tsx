@@ -243,7 +243,7 @@ export const StudentClassDetail = () => {
                                         <Button
                                             size="sm"
                                             variant="outline"
-                                            onClick={() => window.open(`http://localhost:5000${material.fileUrl}`, '_blank')}
+                                            onClick={() => window.open(`${import.meta.env.VITE_API_URL?.replace('/api', '') || 'http://localhost:5000'}${material.fileUrl}`, '_blank')}
                                         >
                                             <Download className="h-4 w-4 mr-2" />
                                             Download

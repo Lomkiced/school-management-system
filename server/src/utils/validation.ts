@@ -26,6 +26,14 @@ export const createStudentSchema = z.object({
   guardianName: z.string().optional(),
   guardianPhone: z.string().optional(),
   password: z.string().min(6, "Password must be at least 6 characters").optional(),
+
+  // Parent Account Creation Fields
+  createParent: z.boolean().optional(),
+  parentEmail: z.string().email().optional(),
+  parentPassword: z.string().min(6).optional(),
+  parentFirstName: z.string().optional(),
+  parentLastName: z.string().optional(),
+  existingParentId: z.string().optional(),
 });
 
 export const updateStudentSchema = createStudentSchema.partial().omit({ email: true, password: true });

@@ -285,11 +285,3 @@ export async function getMyGrades(req: Request, res: Response) {
     });
   }
 }
-
-// Export as object
-export const PortalController = {
-  getMyClasses,
-  getClassInfo,
-  getStudentDashboard,
-  getMyGrades
-};

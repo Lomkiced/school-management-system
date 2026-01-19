@@ -96,9 +96,9 @@ export const errorHandler = (
     // Handle Zod validation errors
     else if (err instanceof ZodError) {
         statusCode = 400;
-        response.message = err.errors[0]?.message || 'Validation failed';
+        response.message = err.issues[0]?.message || 'Validation failed';
         response.code = 'VALIDATION_ERROR';
-        response.details = err.errors.map(e => ({
+        response.details = err.issues.map((e: any) => ({
             field: e.path.join('.'),
             message: e.message
         }));

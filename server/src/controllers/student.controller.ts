@@ -17,21 +17,21 @@ export async function getStudents(req: Request, res: Response) {
     const search = (req.query.search as string) || '';
     const status = (req.query.status as string) || 'ACTIVE';
 
-    const result = await studentService.getAllStudents({ 
-      page, 
-      limit, 
-      search, 
-      status: status as any 
+    const result = await studentService.getAllStudents({
+      page,
+      limit,
+      search,
+      status: status as any
     });
 
-    res.json({ 
-      success: true, 
-      ...result 
+    res.json({
+      success: true,
+      ...result
     });
   } catch (error: any) {
     console.error('Get students error:', error);
-    res.status(500).json({ 
-      success: false, 
+    res.status(500).json({
+      success: false,
       message: error.message || 'Failed to fetch students'
     });
   }
@@ -45,29 +45,29 @@ export async function getStudent(req: Request, res: Response) {
     const { id } = req.params;
 
     if (!id || id.length < 10) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Invalid student ID format' 
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid student ID format'
       });
     }
 
     const student = await studentService.getStudentById(id);
-    
+
     if (!student) {
-      return res.status(404).json({ 
-        success: false, 
-        message: 'Student not found' 
+      return res.status(404).json({
+        success: false,
+        message: 'Student not found'
       });
     }
 
-    res.json({ 
-      success: true, 
-      data: student 
+    res.json({
+      success: true,
+      data: student
     });
   } catch (error: any) {
     console.error('Get student error:', error);
-    res.status(500).json({ 
-      success: false, 
+    res.status(500).json({
+      success: false,
       message: error.message || 'Failed to fetch student'
     });
   }
@@ -78,26 +78,41 @@ export async function getStudent(req: Request, res: Response) {
  */
 export async function createStudent(req: Request, res: Response) {
   try {
+    console.log('=== CREATE STUDENT REQUEST ===');
+    console.log('Request body:', JSON.stringify(req.body, null, 2));
+
     const validatedData = createStudentSchema.parse(req.body);
+
+    console.log('=== VALIDATED DATA ===');
+    console.log('createParent:', validatedData.createParent);
+    console.log('parentEmail:', validatedData.parentEmail);
+    console.log('parentPassword:', validatedData.parentPassword ? '[REDACTED]' : 'NOT PROVIDED');
+
     const student = await studentService.createStudent(validatedData);
-    
-    res.status(201).json({ 
-      success: true, 
+
+    console.log('=== STUDENT CREATED SUCCESSFULLY ===');
+    console.log('Student ID:', student.id);
+
+    res.status(201).json({
+      success: true,
       data: student,
       message: 'Student created successfully'
     });
   } catch (error: any) {
-    console.error('Create student error:', error);
-    
+    console.error('=== CREATE STUDENT ERROR ===');
+    console.error('Error:', error);
+
     if (error instanceof ZodError) {
-      return res.status(400).json({ 
-        success: false, 
-        message: error.issues[0].message 
+      console.error('Zod validation errors:', error.issues);
+      return res.status(400).json({
+        success: false,
+        message: error.issues[0].message,
+        details: error.issues
       });
     }
-    
-    res.status(400).json({ 
-      success: false, 
+
+    res.status(400).json({
+      success: false,
       message: error.message || 'Failed to create student'
     });
   }
@@ -111,39 +126,39 @@ export async function updateStudent(req: Request, res: Response) {
     const { id } = req.params;
 
     if (!id || id.length < 10) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Invalid student ID format' 
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid student ID format'
       });
     }
 
     const validatedData = updateStudentSchema.parse(req.body);
     const student = await studentService.updateStudent(id, validatedData);
-    
-    res.json({ 
-      success: true, 
+
+    res.json({
+      success: true,
       data: student,
       message: 'Student updated successfully'
     });
   } catch (error: any) {
     console.error('Update student error:', error);
-    
+
     if (error instanceof ZodError) {
-      return res.status(400).json({ 
-        success: false, 
-        message: error.issues[0].message 
+      return res.status(400).json({
+        success: false,
+        message: error.issues[0].message
       });
     }
-    
+
     if (error.code === 'P2025') {
-      return res.status(404).json({ 
-        success: false, 
-        message: 'Student not found' 
+      return res.status(404).json({
+        success: false,
+        message: 'Student not found'
       });
     }
-    
-    res.status(400).json({ 
-      success: false, 
+
+    res.status(400).json({
+      success: false,
       message: error.message || 'Failed to update student'
     });
   }
@@ -157,9 +172,9 @@ export async function createBulkStudents(req: Request, res: Response) {
     const { students } = req.body;
 
     if (!Array.isArray(students) || students.length === 0) {
-      return res.status(400).json({ 
-        success: false, 
-        message: "No student data provided" 
+      return res.status(400).json({
+        success: false,
+        message: "No student data provided"
       });
     }
 
@@ -170,8 +185,8 @@ export async function createBulkStudents(req: Request, res: Response) {
       for (const student of students) {
         try {
           // Check if user already exists
-          const exists = await tx.user.findUnique({ 
-            where: { email: student.email } 
+          const exists = await tx.user.findUnique({
+            where: { email: student.email }
           });
 
           if (exists) {
@@ -193,8 +208,8 @@ export async function createBulkStudents(req: Request, res: Response) {
                   firstName: student.firstName,
                   lastName: student.lastName,
                   gender: student.gender || 'MALE',
-                  dateOfBirth: student.dateOfBirth 
-                    ? new Date(student.dateOfBirth) 
+                  dateOfBirth: student.dateOfBirth
+                    ? new Date(student.dateOfBirth)
                     : null,
                   address: student.address || null,
                   guardianName: student.guardianName || null,
@@ -213,17 +228,17 @@ export async function createBulkStudents(req: Request, res: Response) {
       return { count, errors };
     });
 
-    res.status(201).json({ 
-      success: true, 
+    res.status(201).json({
+      success: true,
       message: `Successfully imported ${createdCount.count} students`,
       count: createdCount.count,
       errors: createdCount.errors.length > 0 ? createdCount.errors : undefined
     });
   } catch (error: any) {
     console.error('Bulk import error:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: error.message || "Failed to import students" 
+    res.status(500).json({
+      success: false,
+      message: error.message || "Failed to import students"
     });
   }
 }
@@ -236,30 +251,30 @@ export async function toggleStatus(req: Request, res: Response) {
     const { id } = req.params;
 
     if (!id || id.length < 10) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Invalid student ID format' 
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid student ID format'
       });
     }
 
     await studentService.toggleStudentStatus(id);
-    
-    res.json({ 
-      success: true, 
-      message: "Student status updated successfully" 
+
+    res.json({
+      success: true,
+      message: "Student status updated successfully"
     });
   } catch (error: any) {
     console.error('Toggle status error:', error);
-    
+
     if (error.message.includes('not found')) {
-      return res.status(404).json({ 
-        success: false, 
-        message: error.message 
+      return res.status(404).json({
+        success: false,
+        message: error.message
       });
     }
-    
-    res.status(400).json({ 
-      success: false, 
+
+    res.status(400).json({
+      success: false,
       message: error.message || 'Failed to update status'
     });
   }
@@ -273,30 +288,30 @@ export async function deleteStudent(req: Request, res: Response) {
     const { id } = req.params;
 
     if (!id || id.length < 10) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Invalid student ID format' 
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid student ID format'
       });
     }
 
     await studentService.deleteStudentPermanently(id);
-    
-    res.json({ 
-      success: true, 
-      message: "Student deleted permanently" 
+
+    res.json({
+      success: true,
+      message: "Student deleted permanently"
     });
   } catch (error: any) {
     console.error('Delete student error:', error);
-    
+
     if (error.code === 'P2025') {
-      return res.status(404).json({ 
-        success: false, 
-        message: 'Student not found' 
+      return res.status(404).json({
+        success: false,
+        message: 'Student not found'
       });
     }
-    
-    res.status(400).json({ 
-      success: false, 
+
+    res.status(400).json({
+      success: false,
       message: error.message || 'Failed to delete student'
     });
   }

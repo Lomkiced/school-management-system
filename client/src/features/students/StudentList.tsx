@@ -3,6 +3,7 @@ import {
   AlertCircle,
   ChevronLeft, ChevronRight,
   CreditCard,
+  Edit,
   Filter,
   Plus,
   Search,
@@ -21,6 +22,7 @@ import { Input } from '../../components/ui/input';
 import { Skeleton } from '../../components/ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../../components/ui/table';
 import api from '../../lib/axios';
+import { EditStudentModal } from './EditStudentModal';
 import { ImportStudentsModal } from './ImportStudentsModal';
 
 interface Student {
@@ -28,11 +30,14 @@ interface Student {
   firstName: string;
   lastName: string;
   gender: string;
+  dateOfBirth?: string | null;
+  address?: string | null;
+  guardianName?: string | null;
+  guardianPhone?: string | null;
   user: {
     email: string;
     isActive: boolean;
   };
-  // FIX: Match actual API response structure (class, not section)
   enrollments: {
     id: string;
     classId: string;
@@ -78,6 +83,7 @@ export const StudentList = () => {
   const [filterStatus, setFilterStatus] = useState<"ALL" | "ACTIVE" | "INACTIVE">("ALL");
   const [currentPage, setCurrentPage] = useState(1);
   const [showImport, setShowImport] = useState(false);
+  const [editingStudent, setEditingStudent] = useState<Student | null>(null);
 
   const fetchStudents = async () => {
     try {
@@ -243,8 +249,8 @@ export const StudentList = () => {
                       <button
                         onClick={() => handleToggleStatus(student)}
                         className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold border transition-all ${student.user.isActive
-                            ? "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100"
-                            : "bg-red-50 text-red-700 border-red-200 hover:bg-red-100"
+                          ? "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100"
+                          : "bg-red-50 text-red-700 border-red-200 hover:bg-red-100"
                           }`}
                       >
                         {student.user.isActive ? (
@@ -276,6 +282,14 @@ export const StudentList = () => {
                     <TableCell><span className="capitalize text-slate-600 text-sm">{student.gender?.toLowerCase()}</span></TableCell>
                     <TableCell className="text-right pr-6">
                       <div className="flex justify-end gap-1">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-8 text-indigo-600 hover:bg-indigo-50"
+                          onClick={() => setEditingStudent(student)}
+                        >
+                          <Edit className="h-4 w-4 mr-1" /> Edit
+                        </Button>
                         <Button
                           variant="ghost"
                           size="sm"
@@ -313,6 +327,15 @@ export const StudentList = () => {
           </div>
         </div>
       </Card>
+
+      {/* Edit Student Modal */}
+      {editingStudent && (
+        <EditStudentModal
+          student={editingStudent}
+          onClose={() => setEditingStudent(null)}
+          onSuccess={() => fetchStudents()}
+        />
+      )}
     </div>
   );
 };

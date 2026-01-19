@@ -7,9 +7,10 @@ class SocketService {
   connect() {
     if (this.socket) return this.socket;
 
-    // Connect to the same host as the API
-    // If you are developing locally, it's usually http://localhost:5000
-    this.socket = io('http://localhost:5000', {
+    // Environment-aware Socket.IO connection
+    const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || import.meta.env.VITE_API_URL?.replace('/api', '') || 'http://localhost:5000';
+
+    this.socket = io(SOCKET_URL, {
       transports: ['websocket'], // Force WebSocket for speed
       auth: {
         token: localStorage.getItem('token') // Send JWT for security

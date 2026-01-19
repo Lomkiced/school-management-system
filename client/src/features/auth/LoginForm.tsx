@@ -105,7 +105,7 @@ export const LoginForm = () => {
   };
 
   return (
-    <div className="min-h-screen bg-white font-sans selection:bg-indigo-100 overflow-x-hidden">
+    <div className="min-h-screen bg-white font-sans selection:bg-indigo-100 overflow-x-hidden scroll-smooth">
 
       {/* --- NAVBAR --- */}
       <nav className={cn(
@@ -123,18 +123,23 @@ export const LoginForm = () => {
           </div>
 
           <div className="hidden md:flex items-center gap-8">
-            {['About', 'Academics', 'Admissions', 'Contact'].map((item) => (
-              <a
-                key={item}
-                href={`#${item.toLowerCase()}`}
+            {[
+              { name: 'About', id: 'about' },
+              { name: 'Academics', id: 'academics' },
+              { name: 'Admissions', id: 'admissions' },
+              { name: 'Contact', id: 'contact' }
+            ].map((item) => (
+              <button
+                key={item.name}
+                onClick={() => document.getElementById(item.id)?.scrollIntoView({ behavior: 'smooth' })}
                 className={cn(
-                  "text-sm font-medium hover:text-indigo-600 transition-colors relative group",
+                  "text-sm font-medium hover:text-indigo-600 transition-colors relative group cursor-pointer",
                   scrolled ? "text-slate-600" : "text-slate-600"
                 )}
               >
-                {item}
+                {item.name}
                 <span className="absolute -bottom-1 left-0 w-0 h-0.5 bg-indigo-600 transition-all group-hover:w-full" />
-              </a>
+              </button>
             ))}
           </div>
 
@@ -310,6 +315,41 @@ export const LoginForm = () => {
         </div>
       </section>
 
+      {/* --- ACADEMICS SECTION --- */}
+      <section className="py-20 bg-white" id="academics">
+        <div className="container mx-auto px-6">
+          <div className="text-center max-w-2xl mx-auto mb-16">
+            <h2 className="text-3xl font-bold text-slate-900 mb-4">Academic Programs</h2>
+            <p className="text-slate-600">From primary to senior high, we offer comprehensive programs designed for excellence.</p>
+          </div>
+          <div className="grid md:grid-cols-2 gap-8 max-w-4xl mx-auto">
+            <div className="p-6 border border-slate-200 rounded-xl hover:shadow-lg transition-all">
+              <Lightbulb className="h-10 w-10 text-indigo-600 mb-4" />
+              <h3 className="font-bold text-lg mb-2 text-slate-800">STEM Track</h3>
+              <p className="text-slate-600 text-sm">Advanced science, technology, engineering & mathematics curriculum.</p>
+            </div>
+            <div className="p-6 border border-slate-200 rounded-xl hover:shadow-lg transition-all">
+              <CheckCircle2 className="h-10 w-10 text-emerald-600 mb-4" />
+              <h3 className="font-bold text-lg mb-2 text-slate-800">Humanities</h3>
+              <p className="text-slate-600 text-sm">Social sciences, languages, and liberal arts programs.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* --- ADMISSIONS SECTION --- */}
+      <section className="py-20 bg-slate-50/50" id="admissions">
+        <div className="container mx-auto px-6">
+          <div className="text-center max-w-2xl mx-auto">
+            <h2 className="text-3xl font-bold text-slate-900 mb-4">Ready to Join?</h2>
+            <p className="text-slate-600 mb-8">Applications for Academic Year 2026-2027 are now open.</p>
+            <Button size="lg" className="bg-indigo-600 hover:bg-indigo-700">
+              Apply Now <ArrowRight className="ml-2 h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      </section>
+
       {/* --- STATS BAR --- */}
       <section className="py-16 bg-indigo-900 relative overflow-hidden">
         <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-10" />
@@ -357,6 +397,9 @@ export const LoginForm = () => {
           © 2026 AdminSchool System. All rights reserved.
         </div>
       </footer>
+
+      {/* --- CONTACT SECTION (Embedded in Footer) --- */}
+      <div id="contact" className="h-0" />
 
     </div>
   );
