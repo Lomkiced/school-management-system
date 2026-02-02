@@ -241,6 +241,32 @@ export async function enrollStudent(classId: string, studentId: string) {
 }
 
 /**
+ * Enroll multiple students in a class
+ */
+export async function enrollStudentBatch(classId: string, studentIds: string[]) {
+  // Check if class exists
+  const classExists = await prisma.class.findUnique({
+    where: { id: classId }
+  });
+
+  if (!classExists) {
+    throw new Error("Class not found");
+  }
+
+  // Create enrollments for all studentIds
+  // skipDuplicates: true ensures we don't crash if some are already enrolled
+  const result = await prisma.enrollment.createMany({
+    data: studentIds.map(studentId => ({
+      classId,
+      studentId
+    })),
+    skipDuplicates: true
+  });
+
+  return result;
+}
+
+/**
  * Remove a student from a class
  */
 export async function unenrollStudent(classId: string, studentId: string) {
@@ -296,15 +322,55 @@ export async function getClassStudents(classId: string) {
 
 /**
  * Get form options for creating/updating classes
+ * Enhanced with teacher workload analytics for intelligent assignment
  */
 export async function getFormOptions() {
   const [teachers, subjects] = await Promise.all([
     prisma.teacher.findMany({
+      where: {
+        user: { isActive: true }
+      },
       select: {
         id: true,
         firstName: true,
         lastName: true,
-        phone: true
+        phone: true,
+        maxWeeklyHours: true,
+        department: {
+          select: {
+            id: true,
+            name: true,
+            code: true
+          }
+        },
+        classes: {
+          select: {
+            id: true,
+            name: true,
+            _count: {
+              select: {
+                enrollments: true
+              }
+            }
+          }
+        },
+        schedules: {
+          select: {
+            id: true,
+            timeSlot: {
+              select: {
+                startTime: true,
+                endTime: true
+              }
+            }
+          }
+        },
+        _count: {
+          select: {
+            classes: true,
+            schedules: true
+          }
+        }
       },
       orderBy: {
         lastName: 'asc'
@@ -323,7 +389,47 @@ export async function getFormOptions() {
     })
   ]);
 
-  return { teachers, subjects };
+  // Transform teachers with workload analytics
+  const teachersWithWorkload = teachers.map(teacher => {
+    const classCount = teacher._count.classes;
+    const studentCount = teacher.classes.reduce(
+      (sum, cls) => sum + cls._count.enrollments,
+      0
+    );
+
+    // Calculate weekly hours from schedules (assume 1 hour per slot)
+    const weeklyHours = teacher.schedules.length;
+    const maxWeeklyHours = teacher.maxWeeklyHours || 40;
+    const workloadPercentage = Math.round((weeklyHours / maxWeeklyHours) * 100);
+
+    // Determine availability status
+    let availabilityStatus: 'available' | 'busy' | 'at_capacity' = 'available';
+    if (workloadPercentage >= 90) {
+      availabilityStatus = 'at_capacity';
+    } else if (workloadPercentage >= 70) {
+      availabilityStatus = 'busy';
+    }
+
+    return {
+      id: teacher.id,
+      firstName: teacher.firstName,
+      lastName: teacher.lastName,
+      phone: teacher.phone,
+      department: teacher.department,
+      classCount,
+      studentCount,
+      weeklyHours,
+      maxWeeklyHours,
+      workloadPercentage,
+      availabilityStatus,
+      classes: teacher.classes.map(c => ({ id: c.id, name: c.name }))
+    };
+  });
+
+  return {
+    teachers: teachersWithWorkload,
+    subjects
+  };
 }
 
 /**

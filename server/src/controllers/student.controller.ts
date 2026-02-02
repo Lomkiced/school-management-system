@@ -2,10 +2,8 @@
 import { Prisma } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import { Request, Response } from 'express';
-import { ZodError } from 'zod';
 import * as studentService from '../services/student.service';
 import prisma from '../utils/prisma';
-import { createStudentSchema, updateStudentSchema } from '../utils/validation';
 
 /**
  * Get all students with pagination and filters
@@ -33,6 +31,24 @@ export async function getStudents(req: Request, res: Response) {
     res.status(500).json({
       success: false,
       message: error.message || 'Failed to fetch students'
+    });
+  }
+}
+
+/**
+ * Get unenrolled students (no active class)
+ */
+export async function getUnenrolledStudents(req: Request, res: Response) {
+  try {
+    const students = await studentService.getUnenrolledStudents();
+    res.json({
+      success: true,
+      data: students
+    });
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to fetch unenrolled students'
     });
   }
 }
@@ -81,7 +97,7 @@ export async function createStudent(req: Request, res: Response) {
     console.log('=== CREATE STUDENT REQUEST ===');
     console.log('Request body:', JSON.stringify(req.body, null, 2));
 
-    const validatedData = createStudentSchema.parse(req.body);
+    const validatedData = req.body;
 
     console.log('=== VALIDATED DATA ===');
     console.log('createParent:', validatedData.createParent);
@@ -101,15 +117,6 @@ export async function createStudent(req: Request, res: Response) {
   } catch (error: any) {
     console.error('=== CREATE STUDENT ERROR ===');
     console.error('Error:', error);
-
-    if (error instanceof ZodError) {
-      console.error('Zod validation errors:', error.issues);
-      return res.status(400).json({
-        success: false,
-        message: error.issues[0].message,
-        details: error.issues
-      });
-    }
 
     res.status(400).json({
       success: false,
@@ -132,7 +139,7 @@ export async function updateStudent(req: Request, res: Response) {
       });
     }
 
-    const validatedData = updateStudentSchema.parse(req.body);
+    const validatedData = req.body;
     const student = await studentService.updateStudent(id, validatedData);
 
     res.json({
@@ -142,13 +149,6 @@ export async function updateStudent(req: Request, res: Response) {
     });
   } catch (error: any) {
     console.error('Update student error:', error);
-
-    if (error instanceof ZodError) {
-      return res.status(400).json({
-        success: false,
-        message: error.issues[0].message
-      });
-    }
 
     if (error.code === 'P2025') {
       return res.status(404).json({
@@ -325,5 +325,6 @@ export const StudentController = {
   updateStudent,
   createBulkStudents,
   toggleStatus,
-  deleteStudent
+  deleteStudent,
+  getUnenrolledStudents
 };

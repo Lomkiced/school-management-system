@@ -34,6 +34,11 @@ router.get('/:id/stats', class_controller_1.ClassController.getClassStats);
  * Get form options (teachers, subjects) for creating/editing classes
  */
 router.get('/options/form', (0, role_middleware_1.restrictTo)('SUPER_ADMIN', 'ADMIN'), class_controller_1.ClassController.getFormOptions);
+/**
+ * POST /api/classes/:classId/enroll-bulk
+ * Enroll multiple students at once
+ */
+router.post('/:classId/enroll-bulk', class_controller_1.ClassController.enrollStudents);
 // ==================== ADMIN ONLY ROUTES ====================
 /**
  * POST /api/classes

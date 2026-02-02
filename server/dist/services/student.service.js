@@ -5,6 +5,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.getAllStudents = getAllStudents;
 exports.getStudentById = getStudentById;
+exports.getUnenrolledStudents = getUnenrolledStudents;
 exports.createStudent = createStudent;
 exports.updateStudent = updateStudent;
 exports.toggleStudentStatus = toggleStudentStatus;
@@ -82,7 +83,9 @@ async function getAllStudents({ page = 1, limit = 10, search = '', status = 'ACT
         }
     };
 }
+// ... existing code ...
 async function getStudentById(id) {
+    // ... existing implementation ...
     return await prisma_1.default.student.findUnique({
         where: { id },
         include: {
@@ -160,22 +163,86 @@ async function getStudentById(id) {
         }
     });
 }
+async function getUnenrolledStudents() {
+    return await prisma_1.default.student.findMany({
+        where: {
+            enrollments: {
+                none: {}
+            }
+        },
+        include: {
+            user: {
+                select: {
+                    email: true,
+                    isActive: true
+                }
+            }
+        },
+        orderBy: { lastName: 'asc' }
+    });
+}
 // --- Write Operations ---
 async function createStudent(data) {
-    // Check if email already exists
+    // Check if student email already exists
     const existingUser = await prisma_1.default.user.findUnique({
         where: { email: data.email }
     });
     if (existingUser) {
-        throw new Error('Email already in use');
+        throw new Error('Student email already in use');
     }
     // Use provided password or fallback
-    const passwordToHash = data.password || 'Student123';
-    const hashedPassword = await bcryptjs_1.default.hash(passwordToHash, 10);
+    const studentPassword = data.password || 'Student123';
+    const hashedStudentPassword = await bcryptjs_1.default.hash(studentPassword, 10);
+    // Check if we need to create or link parent
+    let parentId = null;
+    if (data.createParent && data.parentEmail) {
+        // Check if parent with this email already exists
+        const existingParent = await prisma_1.default.user.findUnique({
+            where: { email: data.parentEmail },
+            include: { parentProfile: true }
+        });
+        if (existingParent) {
+            // Parent exists - link to them (sibling scenario)
+            if (existingParent.parentProfile) {
+                parentId = existingParent.parentProfile.id;
+            }
+            else {
+                throw new Error('This email belongs to a non-parent account');
+            }
+        }
+        else {
+            // Create new parent account
+            const parentPassword = data.parentPassword || 'Parent123';
+            const hashedParentPassword = await bcryptjs_1.default.hash(parentPassword, 10);
+            const newParentUser = await prisma_1.default.user.create({
+                data: {
+                    email: data.parentEmail,
+                    password: hashedParentPassword,
+                    role: client_1.UserRole.PARENT,
+                    isActive: true,
+                    parentProfile: {
+                        create: {
+                            firstName: data.parentFirstName || data.guardianName?.split(' ')[0] || 'Parent',
+                            lastName: data.parentLastName || data.guardianName?.split(' ').slice(1).join(' ') || data.lastName,
+                            phone: data.guardianPhone || null,
+                            address: data.address || null
+                        }
+                    }
+                },
+                include: { parentProfile: true }
+            });
+            parentId = newParentUser.parentProfile.id;
+        }
+    }
+    else if (data.existingParentId) {
+        // Link to an explicitly selected existing parent
+        parentId = data.existingParentId;
+    }
+    // Create student with optional parent link
     return await prisma_1.default.user.create({
         data: {
             email: data.email,
-            password: hashedPassword,
+            password: hashedStudentPassword,
             role: client_1.UserRole.STUDENT,
             studentProfile: {
                 create: {
@@ -185,12 +252,22 @@ async function createStudent(data) {
                     gender: data.gender,
                     address: data.address || null,
                     guardianName: data.guardianName || null,
-                    guardianPhone: data.guardianPhone || null
+                    guardianPhone: data.guardianPhone || null,
+                    gradeLevel: data.gradeLevel || 1,
+                    parentId: parentId
                 }
             }
         },
         include: {
-            studentProfile: true
+            studentProfile: {
+                include: {
+                    parent: {
+                        include: {
+                            user: { select: { email: true } }
+                        }
+                    }
+                }
+            }
         }
     });
 }
@@ -202,17 +279,31 @@ async function updateStudent(id, data) {
     if (!student) {
         throw new Error('Student not found');
     }
+    // Prepare update data
+    const updateData = {
+        firstName: data.firstName,
+        lastName: data.lastName,
+        dateOfBirth: data.dateOfBirth ? new Date(data.dateOfBirth) : undefined,
+        gender: data.gender,
+        address: data.address,
+        guardianName: data.guardianName,
+        guardianPhone: data.guardianPhone
+    };
+    // If password is provided, update the linked User account
+    if (data.password) {
+        const hashedPassword = await bcryptjs_1.default.hash(data.password, 10);
+        // We need to update the User model, which is a relation
+        // We can do this via nested update in Prisma if we select the user
+        // But commonly better to do separate or transaction if complex. 
+        // Here we can use nested update since standard relation.
+        await prisma_1.default.user.update({
+            where: { id: student.userId },
+            data: { password: hashedPassword }
+        });
+    }
     return await prisma_1.default.student.update({
         where: { id },
-        data: {
-            firstName: data.firstName,
-            lastName: data.lastName,
-            dateOfBirth: data.dateOfBirth ? new Date(data.dateOfBirth) : undefined,
-            gender: data.gender,
-            address: data.address,
-            guardianName: data.guardianName,
-            guardianPhone: data.guardianPhone
-        },
+        data: updateData,
         include: {
             user: {
                 select: {

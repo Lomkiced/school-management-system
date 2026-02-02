@@ -53,6 +53,7 @@ router.post('/class/:classId/materials', upload_middleware_1.upload.single('file
 router.get('/class/:classId/materials', lmsController.getMaterials);
 // === QUIZZES ===
 router.post('/class/:classId/quizzes', lmsController.createQuiz);
+router.get('/class/:classId/quizzes', lmsController.getClassQuizzes);
 router.get('/quizzes/:quizId', lmsController.getQuiz);
 router.post('/quizzes/:quizId/submit', lmsController.submitQuiz);
 exports.default = router;

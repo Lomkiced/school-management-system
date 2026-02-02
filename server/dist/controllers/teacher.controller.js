@@ -41,8 +41,9 @@ const getTeachers = async (req, res) => {
         const limit = parseInt(req.query.limit) || 10;
         const search = req.query.search || '';
         const status = req.query.status || 'ACTIVE';
+        const departmentId = req.query.departmentId;
         const result = await teacherService.getAllTeachers({
-            page, limit, search, status: status
+            page, limit, search, status: status, departmentId
         });
         res.json({ success: true, ...result });
     }

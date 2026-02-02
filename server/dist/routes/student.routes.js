@@ -9,6 +9,7 @@ const router = (0, express_1.Router)();
 router.use(auth_middleware_1.authenticate);
 // READ
 router.get('/', (0, role_middleware_1.restrictTo)('SUPER_ADMIN', 'ADMIN', 'TEACHER'), student_controller_1.getStudents);
+router.get('/unenrolled', (0, role_middleware_1.restrictTo)('SUPER_ADMIN', 'ADMIN', 'TEACHER'), student_controller_1.getUnenrolledStudents);
 router.get('/:id', (0, role_middleware_1.restrictTo)('SUPER_ADMIN', 'ADMIN', 'TEACHER'), student_controller_1.getStudent);
 // WRITE
 router.post('/', (0, role_middleware_1.restrictTo)('SUPER_ADMIN', 'ADMIN'), student_controller_1.createStudent);

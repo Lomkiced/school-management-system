@@ -26,8 +26,16 @@ exports.createStudentSchema = zod_1.z.object({
     guardianName: zod_1.z.string().optional(),
     guardianPhone: zod_1.z.string().optional(),
     password: zod_1.z.string().min(6, "Password must be at least 6 characters").optional(),
+    gradeLevel: zod_1.z.union([zod_1.z.string(), zod_1.z.number()]).transform(v => Number(v)).optional(),
+    // Parent Account Creation Fields
+    createParent: zod_1.z.boolean().optional(),
+    parentEmail: zod_1.z.string().email().optional(),
+    parentPassword: zod_1.z.string().min(6).optional(),
+    parentFirstName: zod_1.z.string().optional(),
+    parentLastName: zod_1.z.string().optional(),
+    existingParentId: zod_1.z.string().optional(),
 });
-exports.updateStudentSchema = exports.createStudentSchema.partial().omit({ email: true, password: true });
+exports.updateStudentSchema = exports.createStudentSchema.partial().omit({ email: true });
 // ================= TEACHER SCHEMAS =================
 exports.createTeacherSchema = zod_1.z.object({
     email: zod_1.z.string().email("Invalid email address"),
@@ -36,6 +44,7 @@ exports.createTeacherSchema = zod_1.z.object({
     phone: zod_1.z.string().optional(),
     address: zod_1.z.string().optional(),
     specialization: zod_1.z.string().optional(),
+    departmentId: zod_1.z.string().optional(),
     password: zod_1.z.string().min(6).optional(),
 });
 exports.updateTeacherSchema = exports.createTeacherSchema.partial().omit({ email: true, password: true });

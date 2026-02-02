@@ -8,11 +8,13 @@ export const getTeachers = async (req: Request, res: Response) => {
     const limit = parseInt(req.query.limit as string) || 10;
     const search = (req.query.search as string) || '';
     const status = (req.query.status as string) || 'ACTIVE';
+    const departmentId = (req.query.departmentId as string);
+    const assignmentStatus = (req.query.assignmentStatus as string);
 
-    const result = await teacherService.getAllTeachers({ 
-      page, limit, search, status: status as any 
+    const result = await teacherService.getAllTeachers({
+      page, limit, search, status: status as any, departmentId, assignmentStatus: assignmentStatus as any
     });
-    
+
     res.json({ success: true, ...result });
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message });

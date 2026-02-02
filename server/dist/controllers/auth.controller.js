@@ -11,29 +11,84 @@ const prisma_1 = __importDefault(require("../utils/prisma"));
 const validation_1 = require("../utils/validation");
 const JWT_SECRET = process.env.JWT_SECRET || 'supersecretjwtkey';
 const register = async (req, res) => {
-    console.log("📝 REGISTER ATTEMPT:", req.body.email);
+    console.log("📝 REGISTER ATTEMPT:", req.body.email, "ROLE:", req.body.role);
     try {
         const data = validation_1.registerSchema.parse(req.body);
+        const role = req.body.role || 'ADMIN'; // Default to ADMIN if not specified
         const existingUser = await prisma_1.default.user.findUnique({ where: { email: data.email } });
         if (existingUser)
             return res.status(400).json({ success: false, message: 'Email already exists' });
         const hashedPassword = await bcryptjs_1.default.hash(data.password, 10);
-        // Create the user AND the profile in one transaction
-        await prisma_1.default.user.create({
-            data: {
-                email: data.email,
-                password: hashedPassword,
-                role: 'ADMIN', // Defaulting first user to ADMIN for safety, can be changed later
-                adminProfile: {
-                    create: {
-                        firstName: data.firstName,
-                        lastName: data.lastName
-                    }
+        // Create the user with role-specific profile
+        let userData = {
+            email: data.email,
+            password: hashedPassword,
+            role: role,
+        };
+        // Create the appropriate profile based on role
+        if (role === 'ADMIN' || role === 'SUPER_ADMIN') {
+            userData.adminProfile = {
+                create: {
+                    firstName: data.firstName,
+                    lastName: data.lastName
                 }
+            };
+        }
+        else if (role === 'TEACHER') {
+            userData.teacherProfile = {
+                create: {
+                    firstName: data.firstName,
+                    lastName: data.lastName,
+                    phone: req.body.phone || null,
+                    address: req.body.address || null,
+                }
+            };
+        }
+        else if (role === 'STUDENT') {
+            userData.studentProfile = {
+                create: {
+                    firstName: data.firstName,
+                    lastName: data.lastName,
+                    dateOfBirth: req.body.dateOfBirth ? new Date(req.body.dateOfBirth) : null,
+                    gender: req.body.gender || 'MALE',
+                    address: req.body.address || null,
+                    gradeLevel: req.body.gradeLevel || 1,
+                }
+            };
+        }
+        else if (role === 'PARENT') {
+            userData.parentProfile = {
+                create: {
+                    firstName: data.firstName,
+                    lastName: data.lastName,
+                    phone: req.body.phone || null,
+                    address: req.body.address || null,
+                }
+            };
+        }
+        const newUser = await prisma_1.default.user.create({
+            data: userData,
+            include: {
+                adminProfile: true,
+                teacherProfile: true,
+                studentProfile: true,
+                parentProfile: true,
             }
         });
-        console.log("✅ REGISTER SUCCESS:", data.email);
-        res.status(201).json({ success: true, message: 'User registered successfully' });
+        console.log(`✅ REGISTER SUCCESS: ${data.email} [${role}]`);
+        res.status(201).json({
+            success: true,
+            message: 'User registered successfully',
+            data: {
+                id: newUser.id,
+                email: newUser.email,
+                role: newUser.role,
+                adminProfile: newUser.adminProfile,
+                teacherProfile: newUser.teacherProfile,
+                studentProfile: newUser.studentProfile,
+                parentProfile: newUser.parentProfile,
+            }
+        });
     }
     catch (error) {
         console.error("❌ REGISTER ERROR:", error);

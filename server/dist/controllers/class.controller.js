@@ -33,7 +33,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.ClassController = exports.getFormOptions = exports.getClassStats = exports.getClassStudents = exports.unenrollStudent = exports.enrollStudent = exports.deleteClass = exports.updateClass = exports.createClass = exports.getClassById = exports.getClasses = void 0;
+exports.ClassController = exports.getFormOptions = exports.getClassStats = exports.getClassStudents = exports.unenrollStudent = exports.enrollStudents = exports.enrollStudent = exports.deleteClass = exports.updateClass = exports.createClass = exports.getClassById = exports.getClasses = void 0;
 const classService = __importStar(require("../services/class.service"));
 /**
  * Get all classes
@@ -253,6 +253,32 @@ const enrollStudent = async (req, res) => {
 };
 exports.enrollStudent = enrollStudent;
 /**
+ * Enroll multiple students via batch
+ */
+const enrollStudents = async (req, res) => {
+    try {
+        const { classId } = req.params;
+        const { studentIds } = req.body;
+        if (!classId || classId.length < 10) {
+            return res.status(400).json({ success: false, message: 'Invalid class ID' });
+        }
+        if (!studentIds || !Array.isArray(studentIds) || studentIds.length === 0) {
+            return res.status(400).json({ success: false, message: 'Student IDs array is required' });
+        }
+        const result = await classService.enrollStudentBatch(classId, studentIds);
+        res.status(201).json({
+            success: true,
+            data: result,
+            message: `${result.count} students enrolled successfully`
+        });
+    }
+    catch (error) {
+        console.error('Error batch enrolling:', error);
+        res.status(400).json({ success: false, message: error.message || 'Failed to enroll students' });
+    }
+};
+exports.enrollStudents = enrollStudents;
+/**
  * Remove a student from a class
  */
 const unenrollStudent = async (req, res) => {
@@ -380,6 +406,7 @@ exports.ClassController = {
     updateClass: exports.updateClass,
     deleteClass: exports.deleteClass,
     enrollStudent: exports.enrollStudent,
+    enrollStudents: exports.enrollStudents,
     unenrollStudent: exports.unenrollStudent,
     getClassStudents: exports.getClassStudents,
     getClassStats: exports.getClassStats,

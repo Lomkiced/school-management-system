@@ -34,6 +34,19 @@ import studentRoutes from './routes/student.routes';
 import teacherPortalRoutes from './routes/teacher-portal.routes';
 import teacherRoutes from './routes/teacher.routes';
 
+// Automation Routes (Phase 1 Enhancement)
+import attendanceRoutes from './routes/attendance.routes';
+import invoiceRoutes from './routes/invoice.routes';
+import notificationRoutes from './routes/notification.routes';
+
+// Phase 2: Scheduling
+import scheduleRoutes from './routes/schedule.routes';
+
+// Phase 4: People Manager
+import departmentRoutes from './routes/department.routes';
+import promotionRoutes from './routes/promotion.routes';
+import gradeLevelRoutes from './routes/grade-level.routes'; // Added Route Import
+
 // ================= CONFIGURATION =================
 
 const app = express();
@@ -143,6 +156,19 @@ app.use('/api/parent-portal', parentPortalRoutes);
 app.use('/api/chat', chatRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/settings', settingsRoutes);
+
+// Automation routes (Phase 1 Enhancement)
+app.use('/api/notifications', notificationRoutes);
+app.use('/api/invoices', invoiceRoutes);
+app.use('/api/attendance', attendanceRoutes);
+
+// Phase 2: Scheduling
+app.use('/api/schedule', scheduleRoutes);
+
+// Phase 4: People Manager
+app.use('/api/departments', departmentRoutes);
+app.use('/api/promotion', promotionRoutes);
+app.use('/api/grade-levels', gradeLevelRoutes); // Added Route Use
 
 // ================= ERROR HANDLING =================
 

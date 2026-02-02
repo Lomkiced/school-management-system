@@ -4,11 +4,11 @@
 import {
   BookOpen,
   CalendarCheck,
+  CalendarRange, // NEW
   ClipboardList,
   DollarSign,
   GraduationCap,
   LayoutDashboard,
-  MessageSquare,
   Settings,
   Users,
   Users2
@@ -28,6 +28,9 @@ export const Sidebar = () => {
       { href: '/teachers', label: 'Teachers', icon: Users },
       { href: '/parents', label: 'Parents', icon: Users2 },
       { href: '/classes', label: 'Classes', icon: BookOpen },
+      { href: '/promote', label: 'Promotion', icon: GraduationCap }, // NEW
+      { href: '/attendance', label: 'Attendance', icon: CalendarCheck }, // NEW
+      { href: '/timetable', label: 'Timetable', icon: CalendarRange }, // NEW
       { href: '/finance', label: 'Finance', icon: DollarSign },
       { href: '/settings', label: 'Settings', icon: Settings },
     ],
@@ -37,6 +40,8 @@ export const Sidebar = () => {
       { href: '/teachers', label: 'Teachers', icon: Users },
       { href: '/parents', label: 'Parents', icon: Users2 },
       { href: '/classes', label: 'Classes', icon: BookOpen },
+      { href: '/attendance', label: 'Attendance', icon: CalendarCheck }, // NEW
+      { href: '/timetable', label: 'Timetable', icon: CalendarRange }, // NEW
       { href: '/finance', label: 'Finance', icon: DollarSign },
       { href: '/settings', label: 'Settings', icon: Settings },
     ],
@@ -44,15 +49,20 @@ export const Sidebar = () => {
       { href: '/teacher/dashboard', label: 'Dashboard', icon: LayoutDashboard },
       { href: '/teacher/classes', label: 'My Classes', icon: BookOpen },
       { href: '/teacher/grades', label: 'Gradebook', icon: ClipboardList },
+      { href: '/teacher/attendance', label: 'Attendance', icon: CalendarCheck }, // NEW
+      { href: '/teacher/timetable', label: 'Timetable', icon: CalendarRange }, // NEW
     ],
     STUDENT: [
       { href: '/student/dashboard', label: 'Dashboard', icon: LayoutDashboard },
       { href: '/student/classes', label: 'My Classes', icon: BookOpen },
       { href: '/student/grades', label: 'My Grades', icon: CalendarCheck },
+      { href: '/student/timetable', label: 'Timetable', icon: CalendarRange }, // NEW
+      { href: '/student/finance', label: 'My Finances', icon: DollarSign }, // NEW
     ],
     PARENT: [
       { href: '/parent/dashboard', label: 'Family Overview', icon: Users2 },
       { href: '/parent/children', label: 'My Children', icon: GraduationCap },
+      { href: '/parent/finance', label: 'Billing & Invoices', icon: DollarSign }, // NEW
     ]
   };
 

@@ -51,6 +51,66 @@ enum QuestionType {
   IDENTIFICATION
 }
 
+// ================= AUTOMATION ENUMS =================
+
+enum InvoiceStatus {
+  PENDING
+  PAID
+  OVERDUE
+  CANCELLED
+}
+
+enum NotificationType {
+  ATTENDANCE_ABSENT
+  ATTENDANCE_LATE
+  GRADE_POSTED
+  INVOICE_GENERATED
+  INVOICE_OVERDUE
+  PORTAL_BLOCKED
+  ASSIGNMENT_DUE
+  QUIZ_RESULT
+  SYSTEM_ALERT
+}
+
+enum NotificationChannel {
+  EMAIL
+  SMS
+  PUSH
+  IN_APP
+}
+
+enum NotificationStatus {
+  PENDING
+  SENT
+  FAILED
+  READ
+}
+
+enum GradeType {
+  QUIZ
+  ASSIGNMENT
+  EXAM
+  PROJECT
+  PARTICIPATION
+}
+
+enum CheckInMethod {
+  QR_CODE
+  MANUAL
+  BIOMETRIC
+  RFID
+}
+
+enum DayOfWeek {
+  MONDAY
+  TUESDAY
+  WEDNESDAY
+  THURSDAY
+  FRIDAY
+  SATURDAY
+  SUNDAY
+}
+
 // ================= USERS & PROFILES =================
 
 model User {
@@ -68,9 +128,10 @@ model User {
   studentProfile Student?
   parentProfile  Parent?
 
-  // Audits
-  sentChats     Chat[]     @relation("Sender")
-  receivedChats Chat[]     @relation("Receiver")
+  // Communication
+  sentChats     Chat[]         @relation("Sender")
+  receivedChats Chat[]         @relation("Receiver")
+  notifications Notification[]
   auditLogs     AuditLog[]
 }
 
@@ -84,15 +145,34 @@ model Admin {
 }
 
 model Teacher {
-  id        String  @id @default(uuid())
-  userId    String  @unique
-  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  firstName String
-  lastName  String
-  phone     String?
-  address   String?
+  id             String  @id @default(uuid())
+  userId         String  @unique
+  user           User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  firstName      String
+  lastName       String
+  phone          String?
+  address        String?
+  specialization String? // Subject/area of expertise
 
-  classes Class[]
+  // Workload tracking
+  maxWeeklyHours Int @default(40)
+
+  departmentId String?
+  department   Department? @relation(fields: [departmentId], references: [id])
+
+  classes   Class[]
+  schedules Schedule[]
+}
+
+model Department {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  code        String?  @unique
+  description String?
+  
+  teachers    Teacher[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }
 
 model Parent {
@@ -118,16 +198,22 @@ model Student {
   guardianName  String?
   guardianPhone String?
 
+  // Automation Fields
+  gradeLevel      Int     @default(1)      // Grade 1-12 for fee tiers
+  isPortalBlocked Boolean @default(false)  // Block access if unpaid
+
   // Relations
   parentId String?
   parent   Parent? @relation(fields: [parentId], references: [id])
 
-  enrollments  Enrollment[]
-  grades       Grade[]
-  attendance   Attendance[]
-  studentFees  StudentFee[]
-  submissions  Submission[]
-  quizAttempts QuizAttempt[]
+  enrollments     Enrollment[]
+  grades          Grade[]
+  attendance      Attendance[]
+  studentFees     StudentFee[]
+  submissions     Submission[]
+  quizAttempts    QuizAttempt[]
+  invoices        Invoice[]
+  academicRecords AcademicRecord[]
 }
 
 // ================= ACADEMICS =================
@@ -139,8 +225,10 @@ model AcademicYear {
   startDate DateTime
   endDate   DateTime
 
-  terms Term[]
-  fees  FeeStructure[]
+  terms           Term[]
+  fees            FeeStructure[]
+  academicRecords AcademicRecord[]
+  schedules       Schedule[]
 }
 
 model Term {
@@ -174,6 +262,7 @@ model Class {
   assignments      Assignment[]
   subjectMaterials SubjectMaterial[]
   quizzes          Quiz[]
+  schedules        Schedule[]
 }
 
 model Enrollment {
@@ -190,32 +279,53 @@ model Enrollment {
 // ================= GRADING =================
 
 model Grade {
-  id        String  @id @default(uuid())
+  id        String    @id @default(uuid())
   score     Float
   feedback  String?
   studentId String
-  student   Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  student   Student   @relation(fields: [studentId], references: [id], onDelete: Cascade)
   classId   String
-  class     Class   @relation(fields: [classId], references: [id], onDelete: Cascade)
+  class     Class     @relation(fields: [classId], references: [id], onDelete: Cascade)
   termId    String
-  term      Term    @relation(fields: [termId], references: [id])
+  term      Term      @relation(fields: [termId], references: [id])
   subjectId String?
+
+  // Automation Fields for GPA
+  weight    Float     @default(1.0)       // For weighted GPA calculation
+  gradeType GradeType @default(EXAM)      // Quiz, Assignment, Exam, etc.
 
   gradedById String?
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
-  @@unique([studentId, classId, termId, subjectId])
+  @@unique([studentId, classId, termId, subjectId, gradeType])
 }
 
 model Attendance {
   id        String           @id @default(uuid())
-  date      DateTime
+  date      DateTime         @db.Date
   status    AttendanceStatus
   studentId String
   student   Student          @relation(fields: [studentId], references: [id])
   classId   String
   class     Class            @relation(fields: [classId], references: [id])
+
+  // Check-in tracking
+  checkInTime   DateTime?
+  checkOutTime  DateTime?
+  checkInMethod CheckInMethod @default(MANUAL)
+  qrToken       String?                         // Unique token for QR check-in
+  remarks       String?
+
+  // Parent notification tracking
+  parentNotified Boolean  @default(false)
+  notifiedAt     DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([studentId, classId, date])
+  @@index([date, classId])
 }
 
 // ================= LMS =================
@@ -401,3 +511,138 @@ model AuditLog {
   user      User?    @relation(fields: [userId], references: [id])
   createdAt DateTime @default(now())
 }
+
+// ================= AUTOMATION: INVOICING =================
+
+model Invoice {
+  id            String        @id @default(uuid())
+  invoiceNumber String        @unique                    // e.g., "INV-2026-0001"
+  studentId     String
+  student       Student       @relation(fields: [studentId], references: [id])
+
+  amount        Float                                    // Total amount
+  dueDate       DateTime
+  status        InvoiceStatus @default(PENDING)
+  isOverdue     Boolean       @default(false)
+
+  // Metadata
+  description   String?
+  billingPeriod String?                                  // e.g., "January 2026"
+
+  generatedAt   DateTime      @default(now())
+  paidAt        DateTime?
+
+  items         InvoiceItem[]
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  @@index([studentId, status])
+  @@index([dueDate, isOverdue])
+}
+
+model InvoiceItem {
+  id          String   @id @default(uuid())
+  invoiceId   String
+  invoice     Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  description String
+  amount      Float
+  quantity    Int      @default(1)
+}
+
+// ================= AUTOMATION: NOTIFICATIONS =================
+
+model Notification {
+  id        String             @id @default(uuid())
+  userId    String
+  user      User               @relation(fields: [userId], references: [id])
+
+  type      NotificationType
+  channel   NotificationChannel @default(IN_APP)
+  title     String
+  message   String
+  link      String?                                      // Deep link to relevant page
+  metadata  Json?                                        // Flexible payload
+
+  status    NotificationStatus @default(PENDING)
+  isRead    Boolean            @default(false)
+
+  sentAt    DateTime?
+  readAt    DateTime?
+  createdAt DateTime           @default(now())
+
+  @@index([userId, isRead])
+  @@index([userId, type])
+  @@index([createdAt])
+}
+
+// ================= AUTOMATION: ACADEMIC RECORDS =================
+
+model AcademicRecord {
+  id             String       @id @default(uuid())
+  studentId      String
+  student        Student      @relation(fields: [studentId], references: [id])
+  academicYearId String
+  academicYear   AcademicYear @relation(fields: [academicYearId], references: [id])
+
+  gpa            Float?                                  // Calculated GPA
+  totalCredits   Float?
+  classRank      Int?
+  isPromoted     Boolean      @default(false)
+  promotedTo     Int?                                    // Next grade level
+  remarks        String?
+
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@unique([studentId, academicYearId])
+}
+
+// ================= SCHEDULING: TIMETABLE =================
+
+model TimeSlot {
+  id        String   @id @default(uuid())
+  name      String                                       // e.g., "Period 1"
+  startTime String                                       // e.g., "08:00"
+  endTime   String                                       // e.g., "09:00"
+  order     Int                                          // Display order
+  
+  schedules Schedule[]
+}
+
+model Schedule {
+  id             String       @id @default(uuid())
+  classId        String
+  class          Class        @relation(fields: [classId], references: [id])
+  teacherId      String
+  teacher        Teacher      @relation(fields: [teacherId], references: [id])
+  timeSlotId     String
+  timeSlot       TimeSlot     @relation(fields: [timeSlotId], references: [id])
+  dayOfWeek      DayOfWeek
+  room           String?
+
+  academicYearId String
+  academicYear   AcademicYear @relation(fields: [academicYearId], references: [id])
+
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  // Prevent scheduling conflicts
+  @@unique([teacherId, timeSlotId, dayOfWeek, academicYearId])
+  @@unique([classId, timeSlotId, dayOfWeek, academicYearId])
+  @@unique([room, timeSlotId, dayOfWeek, academicYearId])
+  @@index([dayOfWeek, academicYearId])
+}
+
+// ================= CONFIGURATION =================
+
+model GradeLevel {
+  id        String   @id @default(uuid())
+  label     String   // e.g., "Grade 1", "Senior High 2", "College 3"
+  value     Int      @unique // The integer used in Student.gradeLevel
+  category  String?  // "Preschool", "Elementary", "JHS", "SHS", "College"
+  order     Int      @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+

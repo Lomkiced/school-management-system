@@ -35,6 +35,26 @@ export interface Teacher {
     address?: string | null;
 }
 
+// Extended teacher type with workload analytics
+export interface TeacherWithWorkload {
+    id: string;
+    firstName: string;
+    lastName: string;
+    phone?: string | null;
+    department?: {
+        id: string;
+        name: string;
+        code?: string | null;
+    } | null;
+    classCount: number;
+    studentCount: number;
+    weeklyHours: number;
+    maxWeeklyHours: number;
+    workloadPercentage: number;
+    availabilityStatus: 'available' | 'busy' | 'at_capacity';
+    classes?: Array<{ id: string; name: string }>;
+}
+
 export interface Student {
     id: string;
     userId?: string;

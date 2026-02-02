@@ -1,23 +1,17 @@
 // FILE: client/src/features/classes/AddClass.tsx
-// 2026 Standard: Modern class creation form with proper API integration
+// 2026 Standard: Modern class creation form with advanced teacher selection
 
-import { ArrowLeft, BookOpen, Loader2, Save, User, X } from 'lucide-react';
+import { ArrowLeft, BookOpen, Loader2, Save, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
+import { TeacherSelector, type TeacherWithWorkload } from '../../components/teachers/TeacherSelector';
 import { Button } from '../../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Input } from '../../components/ui/input';
 import api from '../../lib/axios';
 
 // Types matching the actual API response
-interface Teacher {
-  id: string;
-  firstName: string;
-  lastName: string;
-  phone?: string | null;
-}
-
 interface Subject {
   id: string;
   name: string;
@@ -26,7 +20,7 @@ interface Subject {
 }
 
 interface OptionData {
-  teachers: Teacher[];
+  teachers: TeacherWithWorkload[];
   subjects: Subject[];
 }
 
@@ -45,6 +39,7 @@ export const AddClass = () => {
 
   // Data
   const [options, setOptions] = useState<OptionData>({ teachers: [], subjects: [] });
+
   const [error, setError] = useState<string | null>(null);
   const [fetchError, setFetchError] = useState<string | null>(null);
 
@@ -60,7 +55,6 @@ export const AddClass = () => {
     const fetchOptions = async () => {
       try {
         setFetchError(null);
-        // FIX: Use correct API path
         const response = await api.get('/classes/options/form');
         if (response.data.success) {
           setOptions(response.data.data || { teachers: [], subjects: [] });
@@ -95,6 +89,15 @@ export const AddClass = () => {
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
+    setError(null);
+  };
+
+  // Handle teacher selection from TeacherSelector
+  const handleTeacherSelect = (teacher: TeacherWithWorkload | null) => {
+    setFormData(prev => ({
+      ...prev,
+      teacherId: teacher?.id || ''
+    }));
     setError(null);
   };
 
@@ -137,7 +140,7 @@ export const AddClass = () => {
   // Fetch error state
   if (fetchError) {
     return (
-      <div className="max-w-xl mx-auto space-y-6">
+      <div className="max-w-2xl mx-auto space-y-6">
         <Button variant="ghost" onClick={() => navigate('/classes')} className="gap-2">
           <ArrowLeft size={16} /> Back to Classes
         </Button>
@@ -166,7 +169,7 @@ export const AddClass = () => {
   // Loading state
   if (isFetching) {
     return (
-      <div className="max-w-xl mx-auto space-y-6">
+      <div className="max-w-2xl mx-auto space-y-6">
         <Button variant="ghost" onClick={() => navigate('/classes')} className="gap-2">
           <ArrowLeft size={16} /> Back to Classes
         </Button>
@@ -182,19 +185,22 @@ export const AddClass = () => {
   }
 
   return (
-    <div className="max-w-xl mx-auto space-y-6 animate-in fade-in duration-500">
+    <div className="max-w-2xl mx-auto space-y-6 animate-in fade-in duration-500">
       <Button variant="ghost" onClick={() => navigate('/classes')} className="gap-2">
         <ArrowLeft size={16} /> Back to Classes
       </Button>
 
-      <Card className="shadow-sm border-slate-200">
-        <CardHeader className="border-b bg-slate-50/50">
+      <Card className="shadow-lg border-slate-200 overflow-hidden">
+        {/* Premium Header */}
+        <CardHeader className="bg-gradient-to-r from-indigo-600 to-purple-600 text-white">
           <CardTitle className="flex items-center gap-2 text-xl">
-            <BookOpen className="h-5 w-5 text-indigo-600" />
+            <div className="p-2 bg-white/20 rounded-xl">
+              <BookOpen className="h-5 w-5" />
+            </div>
             Create New Class
           </CardTitle>
-          <p className="text-sm text-slate-500 mt-1">
-            Create a class and optionally assign a teacher and subject.
+          <p className="text-indigo-100 text-sm mt-1">
+            Set up a class with intelligent teacher assignment
           </p>
         </CardHeader>
 
@@ -202,8 +208,10 @@ export const AddClass = () => {
           <form onSubmit={handleSubmit} className="space-y-6">
             {/* Error Message */}
             {error && (
-              <div className="p-3 text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2">
-                <X className="h-4 w-4 flex-shrink-0" />
+              <div className="p-4 text-sm text-red-700 bg-red-50 border border-red-200 rounded-xl flex items-center gap-3">
+                <div className="p-1.5 bg-red-100 rounded-lg">
+                  <X className="h-4 w-4" />
+                </div>
                 {error}
               </div>
             )}
@@ -218,22 +226,22 @@ export const AddClass = () => {
                 placeholder="e.g., Grade 10 Science, Algebra II"
                 value={formData.name}
                 onChange={handleChange}
-                className="bg-white border-slate-200 focus-visible:ring-indigo-500"
+                className="bg-white border-slate-200 focus-visible:ring-indigo-500 h-12 text-base"
               />
               <p className="text-xs text-slate-400">
                 Enter a descriptive name for this class.
               </p>
             </div>
 
-            {/* Subject Dropdown */}
+            {/* Subject Dropdown - Enhanced */}
             <div className="space-y-2">
               <label className="text-sm font-medium text-slate-700 flex items-center gap-2">
                 <BookOpen className="h-4 w-4 text-slate-400" />
-                Subject (Optional)
+                Subject
               </label>
               <select
                 name="subjectId"
-                className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-colors"
+                className="flex h-12 w-full rounded-xl border-2 border-slate-200 bg-white px-4 py-2 text-base focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
                 onChange={handleChange}
                 value={formData.subjectId}
               >
@@ -251,31 +259,25 @@ export const AddClass = () => {
               )}
             </div>
 
-            {/* Teacher Dropdown */}
+            {/* Teacher Assignment - Using TeacherSelector */}
             <div className="space-y-2">
-              <label className="text-sm font-medium text-slate-700 flex items-center gap-2">
-                <User className="h-4 w-4 text-slate-400" />
-                Assign Teacher (Optional)
+              <label className="text-sm font-medium text-slate-700">
+                Assign Teacher
               </label>
-              <select
-                name="teacherId"
-                className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-colors"
-                onChange={handleChange}
-                value={formData.teacherId}
-              >
-                <option value="">-- No Teacher Assigned --</option>
-                {options.teachers.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.lastName}, {t.firstName}
-                    {t.phone && ` (${t.phone})`}
-                  </option>
-                ))}
-              </select>
+              <TeacherSelector
+                teachers={options.teachers}
+                selectedTeacherId={formData.teacherId || null}
+                onSelect={handleTeacherSelect}
+                isLoading={isFetching}
+              />
               {options.teachers.length === 0 && (
                 <p className="text-xs text-amber-600">
                   No teachers available. Add teachers first.
                 </p>
               )}
+              <p className="text-xs text-slate-400">
+                Select a teacher based on availability and workload distribution.
+              </p>
             </div>
 
             {/* Submit Buttons */}
@@ -283,7 +285,7 @@ export const AddClass = () => {
               <Button
                 type="button"
                 variant="outline"
-                className="flex-1"
+                className="flex-1 h-12"
                 onClick={() => navigate('/classes')}
                 disabled={isSubmitting}
               >
@@ -291,7 +293,7 @@ export const AddClass = () => {
               </Button>
               <Button
                 type="submit"
-                className="flex-1 bg-indigo-600 hover:bg-indigo-700"
+                className="flex-1 h-12 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-base font-medium"
                 disabled={isSubmitting || !formData.name.trim()}
               >
                 {isSubmitting ? (
@@ -312,8 +314,8 @@ export const AddClass = () => {
       </Card>
 
       {/* Help Text */}
-      <div className="text-center text-sm text-slate-400">
-        <p>You can assign students to this class after creation.</p>
+      <div className="text-center text-sm text-slate-400 bg-slate-50 rounded-xl p-4">
+        <p>After creating the class, you can assign students from the class details page.</p>
       </div>
     </div>
   );

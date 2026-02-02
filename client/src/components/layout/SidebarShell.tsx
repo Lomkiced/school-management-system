@@ -6,6 +6,8 @@ import { useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { cn } from '../../lib/utils';
 import { useAuthStore } from '../../store/authStore';
+import { NotificationCenter } from '../notifications/NotificationCenter';
+import { ModeToggle } from '../ui/ModeToggle';
 
 interface SidebarShellProps {
   links: {
@@ -49,37 +51,42 @@ export const SidebarShell = ({ links }: SidebarShellProps) => {
   return (
     <>
       {/* MOBILE HEADER */}
-      <div className="lg:hidden fixed top-0 left-0 z-50 w-full bg-white/80 backdrop-blur-lg border-b border-slate-200/50 px-4 h-16 flex items-center justify-between">
+      <div className="lg:hidden fixed top-0 left-0 z-50 w-full bg-white/70 backdrop-blur-xl border-b border-white/20 px-4 h-16 flex items-center justify-between shadow-sm">
         <div className={cn("flex items-center gap-2 font-bold text-lg", colors.text)}>
           <BookOpen size={24} className="animate-pulse" />
           <span className="bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
             SchoolAdmin
           </span>
         </div>
-        <button
-          onClick={() => setIsOpen(!isOpen)}
-          className="p-2 text-slate-600 hover:bg-slate-100 rounded-xl transition-all active:scale-95"
-        >
-          {isOpen ? <X size={24} /> : <Menu size={24} />}
-        </button>
+        <div className="flex items-center gap-2">
+          {/* Notification Center - Mobile */}
+          <ModeToggle />
+          <NotificationCenter />
+          <button
+            onClick={() => setIsOpen(!isOpen)}
+            className="p-2 text-slate-600 hover:bg-white/50 rounded-xl transition-all active:scale-95"
+          >
+            {isOpen ? <X size={24} /> : <Menu size={24} />}
+          </button>
+        </div>
       </div>
 
       {/* MOBILE OVERLAY */}
       {isOpen && (
         <div
-          className="fixed inset-0 bg-black/40 z-40 lg:hidden backdrop-blur-md transition-all duration-300"
+          className="fixed inset-0 bg-slate-900/20 z-40 lg:hidden backdrop-blur-sm transition-all duration-300"
           onClick={() => setIsOpen(false)}
         />
       )}
 
       {/* SIDEBAR */}
       <aside className={cn(
-        "fixed top-0 left-0 z-50 h-screen w-64 bg-gradient-to-b from-white via-white to-slate-50 border-r border-slate-200/50 flex flex-col transition-all duration-500 ease-out lg:translate-x-0 pt-16 lg:pt-0 shadow-2xl lg:shadow-lg",
+        "fixed top-0 left-0 z-50 h-screen w-64 bg-white/70 backdrop-blur-xl border-r border-white/20 flex flex-col transition-all duration-500 ease-out lg:translate-x-0 pt-16 lg:pt-0 shadow-2xl lg:shadow-none",
         isOpen ? "translate-x-0" : "-translate-x-full"
       )}>
 
         {/* LOGO AREA with gradient border */}
-        <div className="hidden lg:flex h-16 items-center border-b border-slate-200/50 px-6 shrink-0 relative overflow-hidden">
+        <div className="hidden lg:flex h-16 items-center justify-between border-b border-slate-200/50 px-6 shrink-0 relative overflow-hidden">
           <div className={cn("absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r", colors.gradient, "opacity-50")} />
           <div className="flex items-center gap-2.5 group cursor-pointer" onClick={() => navigate('/')}>
             <div className={cn(
@@ -92,6 +99,11 @@ export const SidebarShell = ({ links }: SidebarShellProps) => {
               <span className="bg-gradient-to-r from-slate-800 to-slate-600 bg-clip-text text-transparent">School</span>
               <span className={cn("bg-gradient-to-r bg-clip-text text-transparent", colors.gradient)}>Admin</span>
             </span>
+          </div>
+          {/* Notification Center - Desktop */}
+          <div className="flex items-center gap-2">
+            <ModeToggle />
+            <NotificationCenter />
           </div>
         </div>
 

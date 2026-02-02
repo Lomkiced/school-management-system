@@ -7,6 +7,7 @@ import { Toaster } from 'sonner';
 import { ProtectedRoute } from './components/auth/ProtectedRoute';
 import { ErrorBoundary } from './components/ui/ErrorBoundary';
 import { useAuthStore } from './store/authStore';
+import { ThemeProvider } from './components/ui/ThemeProvider';
 
 // Dynamic import helper with named export support
 const load = (importPromise: Promise<any>, name?: string) => {
@@ -35,13 +36,14 @@ const TeacherDashboard = load(import('./features/teachers/TeacherDashboard'), 'T
 const ParentDashboard = load(import('./features/parents/ParentDashboard'), 'ParentDashboard');
 
 // ================= STUDENTS =================
-const StudentList = load(import('./features/students/StudentList'), 'StudentList');
+// ================= STUDENTS =================
+const StudentManager = load(import('./features/people/students/StudentManager'), 'StudentManager');
 const AddStudent = load(import('./features/students/AddStudent'), 'AddStudent');
 const EnrollStudent = load(import('./features/students/EnrollStudent'), 'EnrollStudent');
 const StudentGrades = load(import('./features/students/StudentGrades'), 'StudentGrades');
 
 // ================= TEACHERS =================
-const TeacherList = load(import('./features/teachers/TeacherList'), 'TeacherList');
+const FacultyManager = load(import('./features/people/faculty/FacultyManager'), 'FacultyManager');
 const AddTeacher = load(import('./features/teachers/AddTeacher'), 'AddTeacher');
 const TeacherClasses = load(import('./features/teachers/TeacherClasses'), 'TeacherClasses');
 const TeacherGradebook = load(import('./features/teachers/TeacherGradebook'), 'TeacherGradebook');
@@ -69,6 +71,13 @@ const QuizBuilder = load(import('./features/lms/QuizBuilder'), 'QuizBuilder');
 const StudentClasses = load(import('./features/students/StudentClasses'), 'StudentClasses');
 const StudentClassDetail = load(import('./features/students/StudentClassDetail'), 'StudentClassDetail');
 
+// ================= NEW FEATURES (PHASE 2 & 3) =================
+const NotificationPage = load(import('./features/notifications/NotificationPage'), 'NotificationPage');
+const AttendancePage = load(import('./features/attendance/AttendancePage'), 'AttendancePage');
+const TimetablePage = load(import('./features/schedule/TimetablePage'), 'TimetablePage');
+const StudentInvoicePage = load(import('./features/finance/StudentInvoicePage'), 'StudentInvoicePage');
+const PromotionWizard = load(import('./features/people/promotion/PromotionWizard'), 'PromotionWizard');
+
 /**
  * Loading Screen Component
  * Shown during lazy-loaded component resolution
@@ -95,87 +104,106 @@ function App() {
   }, [initialize]);
 
   return (
-    <Router>
-      <ErrorBoundary>
-        <Toaster position="top-right" richColors closeButton />
-        <Suspense fallback={<LoadingScreen />}>
-          <Routes>
-            {/* ================= PUBLIC ROUTES ================= */}
-            <Route path="/login" element={<LoginForm />} />
+    <ThemeProvider defaultTheme="light" storageKey="vite-ui-theme">
+      <Router>
+        <ErrorBoundary>
+          <Toaster position="top-right" richColors closeButton />
+          <Suspense fallback={<LoadingScreen />}>
+            <Routes>
+              {/* ================= PUBLIC ROUTES ================= */}
+              <Route path="/login" element={<LoginForm />} />
 
-            {/* Quiz player - accessible by students */}
-            <Route path="/quiz/:quizId" element={<QuizPlayer />} />
+              {/* Quiz player - accessible by students */}
+              <Route path="/quiz/:quizId" element={<QuizPlayer />} />
 
-            {/* ================= ADMIN ROUTES ================= */}
-            {/* Protected for ADMIN and SUPER_ADMIN only */}
-            <Route element={<ProtectedRoute allowedRoles={['ADMIN', 'SUPER_ADMIN']} />}>
-              <Route element={<DashboardLayout />}>
-                <Route path="/dashboard" element={<Dashboard />} />
+              {/* ================= ADMIN ROUTES ================= */}
+              {/* Protected for ADMIN and SUPER_ADMIN only */}
+              <Route element={<ProtectedRoute allowedRoles={['ADMIN', 'SUPER_ADMIN']} />}>
+                <Route element={<DashboardLayout />}>
+                  <Route path="/dashboard" element={<Dashboard />} />
 
-                {/* Students Management */}
-                <Route path="/students" element={<StudentList />} />
-                <Route path="/students/new" element={<AddStudent />} />
-                <Route path="/students/enroll" element={<EnrollStudent />} />
-                <Route path="/students/:studentId/ledger" element={<StudentLedger />} />
+                  {/* Students Management */}
+                  <Route path="/students" element={<StudentManager />} />
+                  <Route path="/students/new" element={<AddStudent />} />
+                  <Route path="/students/enroll" element={<EnrollStudent />} />
+                  <Route path="/students/:studentId/ledger" element={<StudentLedger />} />
 
-                {/* Teachers Management */}
-                <Route path="/teachers" element={<TeacherList />} />
-                <Route path="/teachers/new" element={<AddTeacher />} />
+                  {/* Teachers Management */}
+                  <Route path="/teachers" element={<FacultyManager />} />
+                  <Route path="/teachers/new" element={<AddTeacher />} />
 
-                {/* Parents Management */}
-                <Route path="/parents" element={<ParentList />} />
+                  {/* Parents Management */}
+                  <Route path="/parents" element={<ParentList />} />
 
-                {/* Classes Management */}
-                <Route path="/classes" element={<ClassList />} />
-                <Route path="/classes/new" element={<AddClass />} />
-                <Route path="/classes/:classId/grading" element={<Gradebook />} />
+                  {/* Classes Management */}
+                  <Route path="/classes" element={<ClassList />} />
+                  <Route path="/classes/new" element={<AddClass />} />
+                  <Route path="/classes/:classId/grading" element={<Gradebook />} />
+                  <Route path="/promote" element={<PromotionWizard />} />
 
-                {/* Finance */}
-                <Route path="/finance" element={<FeeList />} />
+                  {/* Finance */}
+                  <Route path="/finance" element={<FeeList />} />
 
-                {/* Settings */}
-                <Route path="/settings" element={<Settings />} />
+                  {/* New Features */}
+                  <Route path="/attendance" element={<AttendancePage />} />
+                  <Route path="/timetable" element={<TimetablePage />} />
+
+                  {/* Settings */}
+                  <Route path="/settings" element={<Settings />} />
+                </Route>
               </Route>
-            </Route>
 
-            {/* ================= STUDENT PORTAL ================= */}
-            <Route element={<ProtectedRoute allowedRoles={['STUDENT']} />}>
-              <Route path="/student" element={<StudentLayout />}>
-                <Route path="dashboard" element={<StudentDashboard />} />
-                <Route path="grades" element={<StudentGrades />} />
-                <Route path="classes" element={<StudentClasses />} />
-                <Route path="class/:classId" element={<StudentClassDetail />} />
+              {/* ================= STUDENT PORTAL ================= */}
+              <Route element={<ProtectedRoute allowedRoles={['STUDENT']} />}>
+                <Route path="/student" element={<StudentLayout />}>
+                  <Route path="dashboard" element={<StudentDashboard />} />
+                  <Route path="grades" element={<StudentGrades />} />
+                  <Route path="classes" element={<StudentClasses />} />
+                  <Route path="class/:classId" element={<StudentClassDetail />} />
+                  <Route path="timetable" element={<TimetablePage />} />
+                  <Route path="finance" element={<StudentInvoicePage />} />
+                </Route>
               </Route>
-            </Route>
 
-            {/* ================= TEACHER PORTAL ================= */}
-            <Route element={<ProtectedRoute allowedRoles={['TEACHER']} />}>
-              <Route path="/teacher" element={<TeacherLayout />}>
-                <Route path="dashboard" element={<TeacherDashboard />} />
-                <Route path="classes" element={<TeacherClasses />} />
-                <Route path="grades" element={<TeacherGradebook />} />
-                <Route path="grading/:classId" element={<Gradebook />} />
-                <Route path="class/:classId/quiz/new" element={<QuizBuilder />} />
+              {/* ================= SHARED NOTIFICATIONS ================= */}
+              <Route element={<ProtectedRoute allowedRoles={['ADMIN', 'SUPER_ADMIN', 'TEACHER', 'STUDENT', 'PARENT']} />}>
+                <Route element={<DashboardLayout />}>
+                  <Route path="/notifications" element={<NotificationPage />} />
+                </Route>
               </Route>
-            </Route>
 
-            {/* ================= PARENT PORTAL ================= */}
-            <Route element={<ProtectedRoute allowedRoles={['PARENT']} />}>
-              <Route path="/parent" element={<ParentLayout />}>
-                <Route path="dashboard" element={<ParentDashboard />} />
+              {/* ================= TEACHER PORTAL ================= */}
+              <Route element={<ProtectedRoute allowedRoles={['TEACHER']} />}>
+                <Route path="/teacher" element={<TeacherLayout />}>
+                  <Route path="dashboard" element={<TeacherDashboard />} />
+                  <Route path="classes" element={<TeacherClasses />} />
+                  <Route path="grades" element={<TeacherGradebook />} />
+                  <Route path="grading/:classId" element={<Gradebook />} />
+                  <Route path="class/:classId/quiz/new" element={<QuizBuilder />} />
+                  <Route path="attendance" element={<AttendancePage />} />
+                  <Route path="timetable" element={<TimetablePage />} />
+                </Route>
               </Route>
-            </Route>
 
-            {/* ================= FALLBACK ROUTES ================= */}
-            {/* Root redirect */}
-            <Route path="/" element={<Navigate to="/login" replace />} />
+              {/* ================= PARENT PORTAL ================= */}
+              <Route element={<ProtectedRoute allowedRoles={['PARENT']} />}>
+                <Route path="/parent" element={<ParentLayout />}>
+                  <Route path="dashboard" element={<ParentDashboard />} />
+                  <Route path="finance" element={<StudentInvoicePage />} />
+                </Route>
+              </Route>
 
-            {/* 404 - Not Found */}
-            <Route path="*" element={<NotFound />} />
-          </Routes>
-        </Suspense>
-      </ErrorBoundary>
-    </Router>
+              {/* ================= FALLBACK ROUTES ================= */}
+              {/* Root redirect */}
+              <Route path="/" element={<Navigate to="/login" replace />} />
+
+              {/* 404 - Not Found */}
+              <Route path="*" element={<NotFound />} />
+            </Routes>
+          </Suspense>
+        </ErrorBoundary>
+      </Router>
+    </ThemeProvider>
   );
 }
 

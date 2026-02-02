@@ -1,13 +1,4 @@
 "use strict";
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
@@ -15,14 +6,13 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.recordSimpleGrade = exports.recordGrade = exports.getGrades = exports.getGradebook = void 0;
 // FILE: server/src/services/grading.service.ts
 const prisma_1 = __importDefault(require("../utils/prisma"));
-
 /**
  * Get complete gradebook data for a class
  * Returns classInfo, enrolled students, terms, and all grades
  */
-const getGradebook = (classId) => __awaiter(void 0, void 0, void 0, function* () {
+const getGradebook = async (classId) => {
     // 1. Get Class Info with teacher and subject
-    const classInfo = yield prisma_1.default.class.findUnique({
+    const classInfo = await prisma_1.default.class.findUnique({
         where: { id: classId },
         include: {
             teacher: {
@@ -50,7 +40,7 @@ const getGradebook = (classId) => __awaiter(void 0, void 0, void 0, function* ()
         throw new Error('Class not found');
     }
     // 2. Get enrolled students
-    const enrollments = yield prisma_1.default.enrollment.findMany({
+    const enrollments = await prisma_1.default.enrollment.findMany({
         where: { classId },
         include: {
             student: {
@@ -74,11 +64,11 @@ const getGradebook = (classId) => __awaiter(void 0, void 0, void 0, function* ()
     });
     const students = enrollments.map(e => e.student);
     // 3. Get all terms (grading periods)
-    const terms = yield prisma_1.default.term.findMany({
+    const terms = await prisma_1.default.term.findMany({
         orderBy: { name: 'asc' }
     });
     // 4. Get all grades for this class
-    const grades = yield prisma_1.default.grade.findMany({
+    const grades = await prisma_1.default.grade.findMany({
         where: { classId },
         select: {
             id: true,
@@ -96,13 +86,12 @@ const getGradebook = (classId) => __awaiter(void 0, void 0, void 0, function* ()
         terms,
         grades
     };
-});
+};
 exports.getGradebook = getGradebook;
-
-const getGrades = (params) => __awaiter(void 0, void 0, void 0, function* () {
+const getGrades = async (params) => {
     const { studentId, classId } = params;
     // 1. Fetch Grades based on filters
-    const grades = yield prisma_1.default.grade.findMany({
+    const grades = await prisma_1.default.grade.findMany({
         where: {
             AND: [
                 studentId ? { studentId } : {},
@@ -117,12 +106,11 @@ const getGrades = (params) => __awaiter(void 0, void 0, void 0, function* () {
         orderBy: { createdAt: 'desc' }
     });
     return grades;
-});
+};
 exports.getGrades = getGrades;
-
-const recordGrade = (data) => __awaiter(void 0, void 0, void 0, function* () {
+const recordGrade = async (data) => {
     // Validate if student is enrolled in that class
-    const enrollment = yield prisma_1.default.enrollment.findFirst({
+    const enrollment = await prisma_1.default.enrollment.findFirst({
         where: {
             studentId: data.studentId,
             classId: data.classId
@@ -131,7 +119,7 @@ const recordGrade = (data) => __awaiter(void 0, void 0, void 0, function* () {
     if (!enrollment)
         throw new Error("Student is not enrolled in this class");
     // Check if grade already exists for this student/class/term
-    const existingGrade = yield prisma_1.default.grade.findFirst({
+    const existingGrade = await prisma_1.default.grade.findFirst({
         where: {
             studentId: data.studentId,
             classId: data.classId,
@@ -140,7 +128,7 @@ const recordGrade = (data) => __awaiter(void 0, void 0, void 0, function* () {
     });
     if (existingGrade) {
         // Update existing grade
-        return yield prisma_1.default.grade.update({
+        return await prisma_1.default.grade.update({
             where: { id: existingGrade.id },
             data: {
                 score: parseFloat(data.score),
@@ -151,7 +139,7 @@ const recordGrade = (data) => __awaiter(void 0, void 0, void 0, function* () {
     }
     else {
         // Create new grade
-        return yield prisma_1.default.grade.create({
+        return await prisma_1.default.grade.create({
             data: {
                 studentId: data.studentId,
                 classId: data.classId,
@@ -161,15 +149,14 @@ const recordGrade = (data) => __awaiter(void 0, void 0, void 0, function* () {
             }
         });
     }
-});
+};
 exports.recordGrade = recordGrade;
-
 /**
  * Fallback: If your schema doesn't have SubjectId in Grade,
  * use this simplified version for recording grades just by Class/Term.
  */
-const recordSimpleGrade = (data) => __awaiter(void 0, void 0, void 0, function* () {
-    return yield prisma_1.default.grade.create({
+const recordSimpleGrade = async (data) => {
+    return await prisma_1.default.grade.create({
         data: {
             studentId: data.studentId,
             classId: data.classId,
@@ -178,5 +165,5 @@ const recordSimpleGrade = (data) => __awaiter(void 0, void 0, void 0, function* 
             feedback: data.feedback
         }
     });
-});
+};
 exports.recordSimpleGrade = recordSimpleGrade;

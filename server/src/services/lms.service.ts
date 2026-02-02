@@ -80,7 +80,7 @@ export async function createAssignment(
 export async function getClassAssignments(classId: string, filter?: string) {
   return await prisma.assignment.findMany({
     where: { classId },
-    include: { 
+    include: {
       submissions: {
         include: {
           student: {
@@ -147,11 +147,11 @@ export async function submitAssignment(
   content?: string
 ) {
   return await prisma.submission.upsert({
-    where: { 
-      studentId_assignmentId: { 
-        studentId, 
-        assignmentId 
-      } 
+    where: {
+      studentId_assignmentId: {
+        studentId,
+        assignmentId
+      }
     },
     update: {
       fileUrl: file ? file.path : undefined,
@@ -182,8 +182,8 @@ export async function gradeSubmission(
 ) {
   const submission = await prisma.submission.update({
     where: { id: submissionId },
-    data: { 
-      grade, 
+    data: {
+      grade,
       feedback,
       gradedAt: new Date()
     },
@@ -347,8 +347,8 @@ export async function getQuiz(quizId: string) {
         }
       },
       questions: {
-        include: { 
-          options: true 
+        include: {
+          options: true
         }
       }
     }
@@ -380,12 +380,17 @@ export async function submitQuiz(
   // 1. Fetch the Quiz with correct answers
   const quiz = await prisma.quiz.findUnique({
     where: { id: quizId },
-    include: { 
-      questions: { 
-        include: { 
-          options: true 
-        } 
-      } 
+    include: {
+      questions: {
+        include: {
+          options: true
+        }
+      },
+      class: {
+        include: {
+          subject: true
+        }
+      }
     }
   });
 
@@ -393,7 +398,17 @@ export async function submitQuiz(
     throw new Error("Quiz not found");
   }
 
+  // Get student info for notification
+  const student = await prisma.student.findUnique({
+    where: { id: studentId }
+  });
+
+  if (!student) {
+    throw new Error("Student not found");
+  }
+
   let totalScore = 0;
+  const maxPossibleScore = quiz.questions.reduce((sum, q) => sum + q.points, 0);
 
   // 2. Grade each answer
   const processedAnswers = answers.map(ans => {
@@ -404,7 +419,7 @@ export async function submitQuiz(
 
     // Multiple Choice / True False
     if (
-      question.type === QuestionType.MULTIPLE_CHOICE || 
+      question.type === QuestionType.MULTIPLE_CHOICE ||
       question.type === QuestionType.TRUE_FALSE
     ) {
       const correctOption = question.options.find((o) => o.isCorrect);
@@ -434,8 +449,13 @@ export async function submitQuiz(
     };
   }).filter((a): a is NonNullable<typeof a> => a !== null);
 
+  // Calculate percentage score
+  const percentageScore = maxPossibleScore > 0
+    ? Math.round((totalScore / maxPossibleScore) * 100)
+    : 0;
+
   // 3. Save the attempt
-  return await prisma.quizAttempt.create({
+  const attempt = await prisma.quizAttempt.create({
     data: {
       quizId,
       studentId,
@@ -460,6 +480,97 @@ export async function submitQuiz(
       }
     }
   });
+
+  // ================= AUTO-POST TO GRADEBOOK =================
+  // Get current term
+  const currentTerm = await prisma.term.findFirst({
+    where: {
+      academicYear: { isCurrent: true }
+    },
+    orderBy: { name: 'asc' }
+  });
+
+  if (currentTerm) {
+    try {
+      // Check if grade entry already exists for this quiz
+      const existingGrade = await prisma.grade.findFirst({
+        where: {
+          studentId,
+          classId: quiz.classId,
+          termId: currentTerm.id,
+          gradeType: 'QUIZ',
+          feedback: { contains: quiz.title }
+        }
+      });
+
+      if (existingGrade) {
+        // Update existing quiz grade (retake scenario)
+        await prisma.grade.update({
+          where: { id: existingGrade.id },
+          data: {
+            score: percentageScore,
+            feedback: `Quiz: ${quiz.title} - Score: ${totalScore}/${maxPossibleScore}`
+          }
+        });
+      } else {
+        // Create new grade entry
+        await prisma.grade.create({
+          data: {
+            studentId,
+            classId: quiz.classId,
+            termId: currentTerm.id,
+            score: percentageScore,
+            gradeType: 'QUIZ',
+            weight: 1.0,
+            feedback: `Quiz: ${quiz.title} - Score: ${totalScore}/${maxPossibleScore}`
+          }
+        });
+      }
+
+      console.log(`✅ Quiz score auto-posted to gradebook: ${student.firstName} ${student.lastName} - ${percentageScore}%`);
+    } catch (error) {
+      console.error('Failed to auto-post quiz grade:', error);
+    }
+  }
+
+  // ================= NOTIFY STUDENT =================
+  try {
+    const { createNotification } = await import('./notification.service');
+
+    const passed = percentageScore >= quiz.passingScore;
+    const statusEmoji = passed ? '🎉' : '📝';
+
+    await createNotification({
+      userId: student.userId,
+      type: 'QUIZ_RESULT',
+      title: `${statusEmoji} Quiz Result: ${quiz.title}`,
+      message: `You scored ${percentageScore}% (${totalScore}/${maxPossibleScore} points). ${passed ? 'Congratulations, you passed!' : `Passing score is ${quiz.passingScore}%.`}`,
+      link: `/student/quizzes/${quizId}/results`,
+      metadata: {
+        quizId,
+        attemptId: attempt.id,
+        score: percentageScore,
+        passed
+      }
+    });
+
+    // Real-time socket notification
+    getIO().to(`student_${student.userId}`).emit('quiz_result', {
+      quizId,
+      title: quiz.title,
+      score: percentageScore,
+      passed
+    });
+  } catch (e) {
+    console.error('Quiz notification failed:', e);
+  }
+
+  return {
+    ...attempt,
+    percentageScore,
+    maxPossibleScore,
+    passed: percentageScore >= quiz.passingScore
+  };
 }
 
 export async function getQuizAttempts(quizId: string) {

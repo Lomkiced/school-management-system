@@ -39,10 +39,16 @@ router.get('/:id/stats', ClassController.getClassStats);
  * GET /api/classes/options/form
  * Get form options (teachers, subjects) for creating/editing classes
  */
-router.get('/options/form', 
+router.get('/options/form',
   restrictTo('SUPER_ADMIN', 'ADMIN'),
   ClassController.getFormOptions
 );
+
+/**
+ * POST /api/classes/:classId/enroll-bulk
+ * Enroll multiple students at once
+ */
+router.post('/:classId/enroll-bulk', ClassController.enrollStudents);
 
 // ==================== ADMIN ONLY ROUTES ====================
 
@@ -51,8 +57,8 @@ router.get('/options/form',
  * Create a new class
  * Body: { name, teacherId?, subjectId? }
  */
-router.post('/', 
-  restrictTo('SUPER_ADMIN', 'ADMIN'), 
+router.post('/',
+  restrictTo('SUPER_ADMIN', 'ADMIN'),
   ClassController.createClass
 );
 
@@ -61,8 +67,8 @@ router.post('/',
  * Update an existing class
  * Body: { name?, teacherId?, subjectId? }
  */
-router.patch('/:id', 
-  restrictTo('SUPER_ADMIN', 'ADMIN'), 
+router.patch('/:id',
+  restrictTo('SUPER_ADMIN', 'ADMIN'),
   ClassController.updateClass
 );
 
@@ -70,8 +76,8 @@ router.patch('/:id',
  * DELETE /api/classes/:id
  * Delete a class
  */
-router.delete('/:id', 
-  restrictTo('SUPER_ADMIN', 'ADMIN'), 
+router.delete('/:id',
+  restrictTo('SUPER_ADMIN', 'ADMIN'),
   ClassController.deleteClass
 );
 
@@ -80,8 +86,8 @@ router.delete('/:id',
  * Enroll a student in a class
  * Body: { studentId }
  */
-router.post('/:classId/enroll', 
-  restrictTo('SUPER_ADMIN', 'ADMIN'), 
+router.post('/:classId/enroll',
+  restrictTo('SUPER_ADMIN', 'ADMIN'),
   ClassController.enrollStudent
 );
 
@@ -89,8 +95,8 @@ router.post('/:classId/enroll',
  * DELETE /api/classes/:classId/students/:studentId
  * Remove a student from a class
  */
-router.delete('/:classId/students/:studentId', 
-  restrictTo('SUPER_ADMIN', 'ADMIN'), 
+router.delete('/:classId/students/:studentId',
+  restrictTo('SUPER_ADMIN', 'ADMIN'),
   ClassController.unenrollStudent
 );
 

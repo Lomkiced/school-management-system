@@ -1,4 +1,37 @@
 "use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
@@ -324,13 +357,26 @@ async function submitQuiz(studentId, quizId, answers) {
                 include: {
                     options: true
                 }
+            },
+            class: {
+                include: {
+                    subject: true
+                }
             }
         }
     });
     if (!quiz) {
         throw new Error("Quiz not found");
     }
+    // Get student info for notification
+    const student = await prisma_1.default.student.findUnique({
+        where: { id: studentId }
+    });
+    if (!student) {
+        throw new Error("Student not found");
+    }
     let totalScore = 0;
+    const maxPossibleScore = quiz.questions.reduce((sum, q) => sum + q.points, 0);
     // 2. Grade each answer
     const processedAnswers = answers.map(ans => {
         const question = quiz.questions.find((q) => q.id === ans.questionId);
@@ -363,8 +409,12 @@ async function submitQuiz(studentId, quizId, answers) {
             textAnswer: ans.textAnswer
         };
     }).filter((a) => a !== null);
+    // Calculate percentage score
+    const percentageScore = maxPossibleScore > 0
+        ? Math.round((totalScore / maxPossibleScore) * 100)
+        : 0;
     // 3. Save the attempt
-    return await prisma_1.default.quizAttempt.create({
+    const attempt = await prisma_1.default.quizAttempt.create({
         data: {
             quizId,
             studentId,
@@ -389,6 +439,91 @@ async function submitQuiz(studentId, quizId, answers) {
             }
         }
     });
+    // ================= AUTO-POST TO GRADEBOOK =================
+    // Get current term
+    const currentTerm = await prisma_1.default.term.findFirst({
+        where: {
+            academicYear: { isCurrent: true }
+        },
+        orderBy: { name: 'asc' }
+    });
+    if (currentTerm) {
+        try {
+            // Check if grade entry already exists for this quiz
+            const existingGrade = await prisma_1.default.grade.findFirst({
+                where: {
+                    studentId,
+                    classId: quiz.classId,
+                    termId: currentTerm.id,
+                    gradeType: 'QUIZ',
+                    feedback: { contains: quiz.title }
+                }
+            });
+            if (existingGrade) {
+                // Update existing quiz grade (retake scenario)
+                await prisma_1.default.grade.update({
+                    where: { id: existingGrade.id },
+                    data: {
+                        score: percentageScore,
+                        feedback: `Quiz: ${quiz.title} - Score: ${totalScore}/${maxPossibleScore}`
+                    }
+                });
+            }
+            else {
+                // Create new grade entry
+                await prisma_1.default.grade.create({
+                    data: {
+                        studentId,
+                        classId: quiz.classId,
+                        termId: currentTerm.id,
+                        score: percentageScore,
+                        gradeType: 'QUIZ',
+                        weight: 1.0,
+                        feedback: `Quiz: ${quiz.title} - Score: ${totalScore}/${maxPossibleScore}`
+                    }
+                });
+            }
+            console.log(`✅ Quiz score auto-posted to gradebook: ${student.firstName} ${student.lastName} - ${percentageScore}%`);
+        }
+        catch (error) {
+            console.error('Failed to auto-post quiz grade:', error);
+        }
+    }
+    // ================= NOTIFY STUDENT =================
+    try {
+        const { createNotification } = await Promise.resolve().then(() => __importStar(require('./notification.service')));
+        const passed = percentageScore >= quiz.passingScore;
+        const statusEmoji = passed ? '🎉' : '📝';
+        await createNotification({
+            userId: student.userId,
+            type: 'QUIZ_RESULT',
+            title: `${statusEmoji} Quiz Result: ${quiz.title}`,
+            message: `You scored ${percentageScore}% (${totalScore}/${maxPossibleScore} points). ${passed ? 'Congratulations, you passed!' : `Passing score is ${quiz.passingScore}%.`}`,
+            link: `/student/quizzes/${quizId}/results`,
+            metadata: {
+                quizId,
+                attemptId: attempt.id,
+                score: percentageScore,
+                passed
+            }
+        });
+        // Real-time socket notification
+        (0, socket_1.getIO)().to(`student_${student.userId}`).emit('quiz_result', {
+            quizId,
+            title: quiz.title,
+            score: percentageScore,
+            passed
+        });
+    }
+    catch (e) {
+        console.error('Quiz notification failed:', e);
+    }
+    return {
+        ...attempt,
+        percentageScore,
+        maxPossibleScore,
+        passed: percentageScore >= quiz.passingScore
+    };
 }
 async function getQuizAttempts(quizId) {
     return await prisma_1.default.quizAttempt.findMany({

@@ -1,184 +1,271 @@
 "use strict";
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
+// FILE: server/src/controllers/portal.controller.ts
+// 2026 Standard: Student portal controller with LMS support
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.PortalController = exports.getMyGrades = exports.getStudentDashboard = exports.getClassInfo = exports.getMyClasses = void 0;
+exports.getMyClasses = getMyClasses;
+exports.getClassInfo = getClassInfo;
+exports.getStudentDashboard = getStudentDashboard;
+exports.getMyGrades = getMyGrades;
 const prisma_1 = __importDefault(require("../utils/prisma"));
-
-function getMyClasses(req, res) {
-    var _a;
-    return __awaiter(this, void 0, void 0, function* () {
-        try {
-            const userId = (_a = req.user) === null || _a === void 0 ? void 0 : _a.id;
-            if (!userId) {
-                return res.status(401).json({ success: false, message: 'Unauthorized' });
-            }
-            const student = yield prisma_1.default.student.findUnique({
-                where: { userId },
-                include: {
-                    enrollments: {
-                        include: {
-                            class: {
-                                include: {
-                                    teacher: { select: { firstName: true, lastName: true } },
-                                    subject: { select: { id: true, name: true, code: true } },
-                                    _count: { select: { enrollments: true } }
+/**
+ * Get student's enrolled classes (for LMS)
+ */
+async function getMyClasses(req, res) {
+    try {
+        const userId = req.user?.id;
+        if (!userId) {
+            return res.status(401).json({
+                success: false,
+                message: 'Unauthorized - Please log in'
+            });
+        }
+        const student = await prisma_1.default.student.findUnique({
+            where: { userId },
+            include: {
+                enrollments: {
+                    include: {
+                        class: {
+                            include: {
+                                teacher: {
+                                    select: {
+                                        firstName: true,
+                                        lastName: true
+                                    }
+                                },
+                                subject: {
+                                    select: {
+                                        id: true,
+                                        name: true,
+                                        code: true
+                                    }
+                                },
+                                _count: {
+                                    select: {
+                                        enrollments: true
+                                    }
                                 }
                             }
                         }
                     }
                 }
-            });
-            if (!student) {
-                return res.status(404).json({ success: false, message: 'Student profile not found' });
             }
-            res.json({ success: true, data: student.enrollments, count: student.enrollments.length });
+        });
+        if (!student) {
+            return res.status(404).json({
+                success: false,
+                message: 'Student profile not found'
+            });
         }
-        catch (error) {
-            console.error('Get my classes error:', error);
-            res.status(500).json({ success: false, message: error.message || 'Failed to fetch classes' });
-        }
-    });
+        res.json({
+            success: true,
+            data: student.enrollments,
+            count: student.enrollments.length
+        });
+    }
+    catch (error) {
+        console.error('Get my classes error:', error);
+        res.status(500).json({
+            success: false,
+            message: error.message || 'Failed to fetch classes'
+        });
+    }
 }
-exports.getMyClasses = getMyClasses;
-
-function getClassInfo(req, res) {
-    var _a;
-    return __awaiter(this, void 0, void 0, function* () {
-        try {
-            const { classId } = req.params;
-            const userId = (_a = req.user) === null || _a === void 0 ? void 0 : _a.id;
-            if (!userId) {
-                return res.status(401).json({ success: false, message: 'Unauthorized' });
-            }
-            if (!classId || classId.length < 10) {
-                return res.status(400).json({ success: false, message: 'Invalid class ID' });
-            }
-            const classInfo = yield prisma_1.default.class.findUnique({
-                where: { id: classId },
-                include: {
-                    teacher: { select: { firstName: true, lastName: true } },
-                    subject: { select: { name: true, code: true } },
-                    _count: { select: { enrollments: true } }
-                }
-            });
-            if (!classInfo) {
-                return res.status(404).json({ success: false, message: 'Class not found' });
-            }
-            res.json({ success: true, data: classInfo });
-        }
-        catch (error) {
-            console.error('Get class info error:', error);
-            res.status(500).json({ success: false, message: error.message || 'Failed to fetch class info' });
-        }
-    });
-}
-exports.getClassInfo = getClassInfo;
-
-function getStudentDashboard(req, res) {
-    var _a;
-    return __awaiter(this, void 0, void 0, function* () {
-        try {
-            const userId = (_a = req.user) === null || _a === void 0 ? void 0 : _a.id;
-            if (!userId) {
-                return res.status(401).json({ success: false, message: 'Unauthorized' });
-            }
-            const student = yield prisma_1.default.student.findUnique({
-                where: { userId },
-                include: {
-                    user: { select: { email: true } },
-                    enrollments: { include: { class: { include: { subject: true } } } },
-                    grades: { orderBy: { createdAt: 'desc' }, take: 5 }
-                }
-            });
-            if (!student) {
-                return res.status(404).json({ success: false, message: 'Student profile not found' });
-            }
-            const totalClasses = student.enrollments.length;
-            const averageGrade = student.grades.length > 0
-                ? (student.grades.reduce((sum, g) => sum + g.score, 0) / student.grades.length).toFixed(1)
-                : null;
-            res.json({
-                success: true,
-                data: {
-                    studentInfo: {
-                        name: `${student.firstName} ${student.lastName}`,
-                        email: student.user.email,
-                        id: student.id
-                    },
-                    stats: { totalClasses, averageGrade, recentGrades: student.grades.length },
-                    enrollments: student.enrollments,
-                    recentGrades: student.grades
-                }
+/**
+ * Get class info for student
+ */
+async function getClassInfo(req, res) {
+    try {
+        const { classId } = req.params;
+        const userId = req.user?.id;
+        if (!userId) {
+            return res.status(401).json({
+                success: false,
+                message: 'Unauthorized'
             });
         }
-        catch (error) {
-            console.error('Get student dashboard error:', error);
-            res.status(500).json({ success: false, message: error.message || 'Failed to fetch dashboard' });
+        if (!classId || classId.length < 10) {
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid class ID'
+            });
         }
-    });
-}
-exports.getStudentDashboard = getStudentDashboard;
-
-function getMyGrades(req, res) {
-    var _a;
-    return __awaiter(this, void 0, void 0, function* () {
-        try {
-            const userId = (_a = req.user) === null || _a === void 0 ? void 0 : _a.id;
-            if (!userId) {
-                return res.status(401).json({ success: false, message: 'Unauthorized' });
-            }
-            const student = yield prisma_1.default.student.findUnique({
-                where: { userId },
-                include: {
-                    grades: {
-                        include: {
-                            class: { include: { subject: true, teacher: true } },
-                            term: true
-                        },
-                        orderBy: { createdAt: 'desc' }
+        const classInfo = await prisma_1.default.class.findUnique({
+            where: { id: classId },
+            include: {
+                teacher: {
+                    select: {
+                        firstName: true,
+                        lastName: true
+                    }
+                },
+                subject: {
+                    select: {
+                        name: true,
+                        code: true
+                    }
+                },
+                _count: {
+                    select: {
+                        enrollments: true
                     }
                 }
-            });
-            if (!student) {
-                return res.status(404).json({ success: false, message: 'Student profile not found' });
             }
-            const reportCard = student.grades.map(g => {
-                var _a, _b;
-                return ({
-                    id: g.id,
-                    subject: ((_a = g.class.subject) === null || _a === void 0 ? void 0 : _a.name) || 'N/A',
-                    code: ((_b = g.class.subject) === null || _b === void 0 ? void 0 : _b.code) || 'N/A',
-                    className: g.class.name,
-                    teacher: g.class.teacher ? `${g.class.teacher.lastName}, ${g.class.teacher.firstName}` : 'No Teacher',
-                    term: g.term.name,
-                    score: g.score,
-                    feedback: g.feedback,
-                    gradedAt: g.updatedAt
-                });
-            });
-            res.json({
-                success: true,
-                data: reportCard,
-                studentInfo: { name: `${student.firstName} ${student.lastName}`, studentId: student.id }
+        });
+        if (!classInfo) {
+            return res.status(404).json({
+                success: false,
+                message: 'Class not found'
             });
         }
-        catch (error) {
-            console.error('Get grades error:', error);
-            res.status(500).json({ success: false, message: error.message || 'Failed to fetch grades' });
-        }
-    });
+        res.json({
+            success: true,
+            data: classInfo
+        });
+    }
+    catch (error) {
+        console.error('Get class info error:', error);
+        res.status(500).json({
+            success: false,
+            message: error.message || 'Failed to fetch class info'
+        });
+    }
 }
-exports.getMyGrades = getMyGrades;
-
-exports.PortalController = { getMyClasses, getClassInfo, getStudentDashboard, getMyGrades };
+/**
+ * Get student dashboard data
+ */
+async function getStudentDashboard(req, res) {
+    try {
+        const userId = req.user?.id;
+        if (!userId) {
+            return res.status(401).json({
+                success: false,
+                message: 'Unauthorized'
+            });
+        }
+        const student = await prisma_1.default.student.findUnique({
+            where: { userId },
+            include: {
+                user: {
+                    select: { email: true }
+                },
+                enrollments: {
+                    include: {
+                        class: {
+                            include: {
+                                subject: true
+                            }
+                        }
+                    }
+                },
+                grades: {
+                    orderBy: { createdAt: 'desc' },
+                    take: 5
+                }
+            }
+        });
+        if (!student) {
+            return res.status(404).json({
+                success: false,
+                message: 'Student profile not found'
+            });
+        }
+        const totalClasses = student.enrollments.length;
+        const averageGrade = student.grades.length > 0
+            ? (student.grades.reduce((sum, g) => sum + g.score, 0) / student.grades.length).toFixed(1)
+            : null;
+        res.json({
+            success: true,
+            data: {
+                studentInfo: {
+                    name: `${student.firstName} ${student.lastName}`,
+                    email: student.user.email,
+                    id: student.id
+                },
+                stats: {
+                    totalClasses,
+                    averageGrade,
+                    recentGrades: student.grades.length
+                },
+                enrollments: student.enrollments,
+                recentGrades: student.grades
+            }
+        });
+    }
+    catch (error) {
+        console.error('Get student dashboard error:', error);
+        res.status(500).json({
+            success: false,
+            message: error.message || 'Failed to fetch dashboard'
+        });
+    }
+}
+/**
+ * Get grades for the authenticated student
+ */
+async function getMyGrades(req, res) {
+    try {
+        const userId = req.user?.id;
+        if (!userId) {
+            return res.status(401).json({
+                success: false,
+                message: "Unauthorized - Please log in"
+            });
+        }
+        const student = await prisma_1.default.student.findUnique({
+            where: { userId },
+            include: {
+                grades: {
+                    include: {
+                        class: {
+                            include: {
+                                subject: true,
+                                teacher: true
+                            }
+                        },
+                        term: true
+                    },
+                    orderBy: {
+                        createdAt: 'desc'
+                    }
+                }
+            }
+        });
+        if (!student) {
+            return res.status(404).json({
+                success: false,
+                message: "Student profile not found"
+            });
+        }
+        const reportCard = student.grades.map(g => ({
+            id: g.id,
+            subject: g.class.subject?.name || 'N/A',
+            code: g.class.subject?.code || 'N/A',
+            className: g.class.name,
+            teacher: g.class.teacher
+                ? `${g.class.teacher.lastName}, ${g.class.teacher.firstName}`
+                : 'No Teacher Assigned',
+            term: g.term.name,
+            score: g.score,
+            feedback: g.feedback,
+            gradedAt: g.updatedAt
+        }));
+        res.json({
+            success: true,
+            data: reportCard,
+            studentInfo: {
+                name: `${student.firstName} ${student.lastName}`,
+                studentId: student.id
+            }
+        });
+    }
+    catch (error) {
+        console.error('Get grades error:', error);
+        res.status(500).json({
+            success: false,
+            message: error.message || 'Failed to fetch grades'
+        });
+    }
+}

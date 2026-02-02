@@ -38,6 +38,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.StudentController = void 0;
 exports.getStudents = getStudents;
+exports.getUnenrolledStudents = getUnenrolledStudents;
 exports.getStudent = getStudent;
 exports.createStudent = createStudent;
 exports.updateStudent = updateStudent;
@@ -78,6 +79,24 @@ async function getStudents(req, res) {
     }
 }
 /**
+ * Get unenrolled students (no active class)
+ */
+async function getUnenrolledStudents(req, res) {
+    try {
+        const students = await studentService.getUnenrolledStudents();
+        res.json({
+            success: true,
+            data: students
+        });
+    }
+    catch (error) {
+        res.status(500).json({
+            success: false,
+            message: error.message || 'Failed to fetch unenrolled students'
+        });
+    }
+}
+/**
  * Get a single student by ID
  */
 async function getStudent(req, res) {
@@ -114,8 +133,16 @@ async function getStudent(req, res) {
  */
 async function createStudent(req, res) {
     try {
+        console.log('=== CREATE STUDENT REQUEST ===');
+        console.log('Request body:', JSON.stringify(req.body, null, 2));
         const validatedData = validation_1.createStudentSchema.parse(req.body);
+        console.log('=== VALIDATED DATA ===');
+        console.log('createParent:', validatedData.createParent);
+        console.log('parentEmail:', validatedData.parentEmail);
+        console.log('parentPassword:', validatedData.parentPassword ? '[REDACTED]' : 'NOT PROVIDED');
         const student = await studentService.createStudent(validatedData);
+        console.log('=== STUDENT CREATED SUCCESSFULLY ===');
+        console.log('Student ID:', student.id);
         res.status(201).json({
             success: true,
             data: student,
@@ -123,11 +150,14 @@ async function createStudent(req, res) {
         });
     }
     catch (error) {
-        console.error('Create student error:', error);
+        console.error('=== CREATE STUDENT ERROR ===');
+        console.error('Error:', error);
         if (error instanceof zod_1.ZodError) {
+            console.error('Zod validation errors:', error.issues);
             return res.status(400).json({
                 success: false,
-                message: error.issues[0].message
+                message: error.issues[0].message,
+                details: error.issues
             });
         }
         res.status(400).json({
@@ -319,5 +349,6 @@ exports.StudentController = {
     updateStudent,
     createBulkStudents,
     toggleStatus,
-    deleteStudent
+    deleteStudent,
+    getUnenrolledStudents
 };

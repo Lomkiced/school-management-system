@@ -26,6 +26,7 @@ export const createStudentSchema = z.object({
   guardianName: z.string().optional(),
   guardianPhone: z.string().optional(),
   password: z.string().min(6, "Password must be at least 6 characters").optional(),
+  gradeLevel: z.union([z.string(), z.number()]).transform(v => Number(v)).optional(),
 
   // Parent Account Creation Fields
   createParent: z.boolean().optional(),
@@ -36,7 +37,7 @@ export const createStudentSchema = z.object({
   existingParentId: z.string().optional(),
 });
 
-export const updateStudentSchema = createStudentSchema.partial().omit({ email: true, password: true });
+export const updateStudentSchema = createStudentSchema.partial().omit({ email: true });
 
 // ================= TEACHER SCHEMAS =================
 export const createTeacherSchema = z.object({
@@ -46,6 +47,7 @@ export const createTeacherSchema = z.object({
   phone: z.string().optional(),
   address: z.string().optional(),
   specialization: z.string().optional(),
+  departmentId: z.string().optional(),
   password: z.string().min(6).optional(),
 });
 

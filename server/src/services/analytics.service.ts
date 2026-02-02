@@ -9,12 +9,12 @@ export const getDashboardStats = async () => {
     totalClasses,
     monthlyRevenue
   ] = await prisma.$transaction([
-    // 1. Count Active Students
-    prisma.student.count({ where: { user: { isActive: true } } }),
-    
-    // 2. Count Active Teachers
-    prisma.teacher.count({ where: { user: { isActive: true } } }),
-    
+    // 1. Count Active Students (By Role)
+    prisma.user.count({ where: { role: 'STUDENT', isActive: true } }),
+
+    // 2. Count Active Teachers (By Role)
+    prisma.user.count({ where: { role: 'TEACHER', isActive: true } }),
+
     // 3. Count Total Classes
     prisma.class.count(),
 
@@ -55,9 +55,9 @@ export const getFinancialChartData = async () => {
   // Advanced: Group payments by month for the chart
   // Note: Prisma doesn't support sophisticated date grouping easily without raw SQL.
   // For a reliable cross-database solution, we fetch this year's payments and group in JS.
-  
+
   const startOfYear = new Date(new Date().getFullYear(), 0, 1);
-  
+
   const payments = await prisma.payment.findMany({
     where: { paidAt: { gte: startOfYear } },
     select: { amount: true, paidAt: true }
@@ -65,7 +65,7 @@ export const getFinancialChartData = async () => {
 
   // Group by Month (0-11)
   const monthlyData = new Array(12).fill(0);
-  
+
   payments.forEach(p => {
     const month = new Date(p.paidAt).getMonth();
     monthlyData[month] += p.amount;

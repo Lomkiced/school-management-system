@@ -9,29 +9,40 @@ interface TeacherQueryParams {
   limit?: number;
   search?: string;
   status?: 'ACTIVE' | 'INACTIVE' | 'ALL';
+  departmentId?: string;
+  assignmentStatus?: 'assigned' | 'unassigned' | 'all'; // NEW: Filter by class assignment
 }
 
 // --- Read Operations ---
 
-export async function getAllTeachers({ 
-  page = 1, 
-  limit = 10, 
-  search = '', 
-  status = 'ACTIVE' 
+export async function getAllTeachers({
+  page = 1,
+  limit = 10,
+  search = '',
+  status = 'ACTIVE',
+  departmentId,
+  assignmentStatus = 'all'
 }: TeacherQueryParams) {
   const skip = (page - 1) * limit;
 
-  // Build Filter (removed 'specialization' as it doesn't exist in schema)
+  // Build Filter
   const whereClause: Prisma.TeacherWhereInput = {
     AND: [
       status !== 'ALL' ? { user: { isActive: status === 'ACTIVE' } } : {},
+      // Department filter logic:
+      // - If departmentId is 'null', show teachers with no department
+      // - Otherwise filter by specific department
+      departmentId ? { departmentId: departmentId === 'null' ? null : departmentId } : {},
       search ? {
         OR: [
           { firstName: { contains: search, mode: 'insensitive' } },
           { lastName: { contains: search, mode: 'insensitive' } },
           { user: { email: { contains: search, mode: 'insensitive' } } }
         ]
-      } : {}
+      } : {},
+      // NEW: Assignment status filter
+      assignmentStatus === 'unassigned' ? { classes: { none: {} } } : {},
+      assignmentStatus === 'assigned' ? { classes: { some: {} } } : {}
     ]
   };
 
@@ -43,14 +54,23 @@ export async function getAllTeachers({
       take: limit,
       skip: skip,
       include: {
-        user: { 
-          select: { 
-            email: true, 
-            isActive: true 
-          } 
+        user: {
+          select: {
+            email: true,
+            isActive: true
+          }
+        },
+        department: {
+          select: {
+            id: true,
+            name: true,
+            code: true
+          }
         },
         classes: {
-          include: {
+          select: {
+            id: true,
+            name: true,
             subject: {
               select: {
                 name: true,
@@ -60,9 +80,9 @@ export async function getAllTeachers({
           }
         },
         _count: {
-          select: { 
-            classes: true 
-          } 
+          select: {
+            classes: true
+          }
         }
       },
       orderBy: { lastName: 'asc' }
@@ -85,10 +105,10 @@ export async function getTeacherById(id: string) {
     where: { id },
     include: {
       user: {
-        select: { 
-          email: true, 
-          role: true, 
-          isActive: true 
+        select: {
+          email: true,
+          role: true,
+          isActive: true
         }
       },
       classes: {
@@ -138,7 +158,7 @@ export async function createTeacher(data: any) {
   const existingUser = await prisma.user.findUnique({
     where: { email: data.email }
   });
-  
+
   if (existingUser) {
     throw new Error('Email already in use');
   }
@@ -163,13 +183,15 @@ export async function createTeacher(data: any) {
         firstName: data.firstName,
         lastName: data.lastName,
         phone: data.phone || null,
-        address: data.address || null
+        address: data.address || null,
+        specialization: data.specialization || null,
+        departmentId: data.departmentId || null
       }
     });
 
-    return { 
-      ...newTeacherProfile, 
-      email: newUser.email 
+    return {
+      ...newTeacherProfile,
+      email: newUser.email
     };
   });
 }
@@ -190,7 +212,9 @@ export async function updateTeacher(id: string, data: any) {
       firstName: data.firstName,
       lastName: data.lastName,
       phone: data.phone,
-      address: data.address
+      address: data.address,
+      specialization: data.specialization,
+      departmentId: data.departmentId
     },
     include: {
       user: {
@@ -205,16 +229,16 @@ export async function updateTeacher(id: string, data: any) {
 
 // === TOGGLE STATUS ===
 export async function toggleTeacherStatus(id: string) {
-  const teacher = await prisma.teacher.findUnique({ 
+  const teacher = await prisma.teacher.findUnique({
     where: { id },
-    select: { 
-      userId: true, 
-      user: { 
-        select: { 
-          isActive: true 
-        } 
-      } 
-    } 
+    select: {
+      userId: true,
+      user: {
+        select: {
+          isActive: true
+        }
+      }
+    }
   });
 
   if (!teacher) {
@@ -283,11 +307,11 @@ export async function getTeacherStats(id: string) {
 
   const totalClasses = teacher.classes.length;
   const totalStudents = teacher.classes.reduce(
-    (sum, cls) => sum + cls._count.enrollments, 
+    (sum, cls) => sum + cls._count.enrollments,
     0
   );
   const totalGradesGiven = teacher.classes.reduce(
-    (sum, cls) => sum + cls._count.grades, 
+    (sum, cls) => sum + cls._count.grades,
     0
   );
 

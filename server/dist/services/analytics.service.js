@@ -9,10 +9,10 @@ const prisma_1 = __importDefault(require("../utils/prisma"));
 const getDashboardStats = async () => {
     // PROFESSIONAL: Run independent queries in PARALLEL for speed
     const [totalStudents, totalTeachers, totalClasses, monthlyRevenue] = await prisma_1.default.$transaction([
-        // 1. Count Active Students
-        prisma_1.default.student.count({ where: { user: { isActive: true } } }),
-        // 2. Count Active Teachers
-        prisma_1.default.teacher.count({ where: { user: { isActive: true } } }),
+        // 1. Count Active Students (By Role)
+        prisma_1.default.user.count({ where: { role: 'STUDENT', isActive: true } }),
+        // 2. Count Active Teachers (By Role)
+        prisma_1.default.user.count({ where: { role: 'TEACHER', isActive: true } }),
         // 3. Count Total Classes
         prisma_1.default.class.count(),
         // 4. Calculate Revenue (Sum of 'PAID' payments this month)

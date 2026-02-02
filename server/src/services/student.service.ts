@@ -90,7 +90,9 @@ export async function getAllStudents({
   };
 }
 
+// ... existing code ...
 export async function getStudentById(id: string) {
+  // ... existing implementation ...
   return await prisma.student.findUnique({
     where: { id },
     include: {
@@ -168,6 +170,26 @@ export async function getStudentById(id: string) {
     }
   });
 }
+
+export async function getUnenrolledStudents() {
+  return await prisma.student.findMany({
+    where: {
+      enrollments: {
+        none: {}
+      }
+    },
+    include: {
+      user: {
+        select: {
+          email: true,
+          isActive: true
+        }
+      }
+    },
+    orderBy: { lastName: 'asc' }
+  });
+}
+
 
 // --- Write Operations ---
 
@@ -247,6 +269,7 @@ export async function createStudent(data: any) {
           address: data.address || null,
           guardianName: data.guardianName || null,
           guardianPhone: data.guardianPhone || null,
+          gradeLevel: data.gradeLevel || 1,
           parentId: parentId
         }
       }
@@ -275,17 +298,33 @@ export async function updateStudent(id: string, data: any) {
     throw new Error('Student not found');
   }
 
+  // Prepare update data
+  const updateData: any = {
+    firstName: data.firstName,
+    lastName: data.lastName,
+    dateOfBirth: data.dateOfBirth ? new Date(data.dateOfBirth) : undefined,
+    gender: data.gender as Gender,
+    address: data.address,
+    guardianName: data.guardianName,
+    guardianPhone: data.guardianPhone
+  };
+
+  // If password is provided, update the linked User account
+  if (data.password) {
+    const hashedPassword = await bcrypt.hash(data.password, 10);
+    // We need to update the User model, which is a relation
+    // We can do this via nested update in Prisma if we select the user
+    // But commonly better to do separate or transaction if complex. 
+    // Here we can use nested update since standard relation.
+    await prisma.user.update({
+      where: { id: student.userId },
+      data: { password: hashedPassword }
+    });
+  }
+
   return await prisma.student.update({
     where: { id },
-    data: {
-      firstName: data.firstName,
-      lastName: data.lastName,
-      dateOfBirth: data.dateOfBirth ? new Date(data.dateOfBirth) : undefined,
-      gender: data.gender as Gender,
-      address: data.address,
-      guardianName: data.guardianName,
-      guardianPhone: data.guardianPhone
-    },
+    data: updateData,
     include: {
       user: {
         select: {

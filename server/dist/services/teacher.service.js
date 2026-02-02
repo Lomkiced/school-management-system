@@ -15,19 +15,26 @@ const client_1 = require("@prisma/client");
 const bcryptjs_1 = __importDefault(require("bcryptjs"));
 const prisma_1 = __importDefault(require("../utils/prisma"));
 // --- Read Operations ---
-async function getAllTeachers({ page = 1, limit = 10, search = '', status = 'ACTIVE' }) {
+async function getAllTeachers({ page = 1, limit = 10, search = '', status = 'ACTIVE', departmentId, assignmentStatus = 'all' }) {
     const skip = (page - 1) * limit;
-    // Build Filter (removed 'specialization' as it doesn't exist in schema)
+    // Build Filter
     const whereClause = {
         AND: [
             status !== 'ALL' ? { user: { isActive: status === 'ACTIVE' } } : {},
+            // Department filter logic:
+            // - If departmentId is 'null', show teachers with no department
+            // - Otherwise filter by specific department
+            departmentId ? { departmentId: departmentId === 'null' ? null : departmentId } : {},
             search ? {
                 OR: [
                     { firstName: { contains: search, mode: 'insensitive' } },
                     { lastName: { contains: search, mode: 'insensitive' } },
                     { user: { email: { contains: search, mode: 'insensitive' } } }
                 ]
-            } : {}
+            } : {},
+            // NEW: Assignment status filter
+            assignmentStatus === 'unassigned' ? { classes: { none: {} } } : {},
+            assignmentStatus === 'assigned' ? { classes: { some: {} } } : {}
         ]
     };
     // Parallel Fetch (Data + Count)
@@ -44,8 +51,17 @@ async function getAllTeachers({ page = 1, limit = 10, search = '', status = 'ACT
                         isActive: true
                     }
                 },
+                department: {
+                    select: {
+                        id: true,
+                        name: true,
+                        code: true
+                    }
+                },
                 classes: {
-                    include: {
+                    select: {
+                        id: true,
+                        name: true,
                         subject: {
                             select: {
                                 name: true,
@@ -150,7 +166,9 @@ async function createTeacher(data) {
                 firstName: data.firstName,
                 lastName: data.lastName,
                 phone: data.phone || null,
-                address: data.address || null
+                address: data.address || null,
+                specialization: data.specialization || null,
+                departmentId: data.departmentId || null
             }
         });
         return {
@@ -173,7 +191,9 @@ async function updateTeacher(id, data) {
             firstName: data.firstName,
             lastName: data.lastName,
             phone: data.phone,
-            address: data.address
+            address: data.address,
+            specialization: data.specialization,
+            departmentId: data.departmentId
         },
         include: {
             user: {
